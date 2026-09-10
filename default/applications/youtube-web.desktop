@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=YouTube
+Exec=brave --app=https://youtube.com
+Icon=brave-browser
+Terminal=false
+Categories=AudioVideo;Video;

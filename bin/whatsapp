@@ -1,0 +1,6 @@
+#!/bin/sh
+# WhatsApp Web in a chromeless Brave window (no tabs, no address bar), so it
+# behaves like a native app. --class gives it its own window class instead of
+# "brave-browser", which is what lets Hyprland rules and waybar tell it apart
+# from a normal browser window.
+exec brave --app=https://web.whatsapp.com --class=whatsapp "$@"

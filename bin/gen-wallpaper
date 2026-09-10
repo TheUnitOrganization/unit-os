@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Generate a plain, serious wallpaper from the current theme palette.
+
+No stock art, no anime: a very dark ground with one soft off-centre glow and
+a faint vignette. Because the tonal range is tiny, smooth gradients band
+badly on an OLED-ish panel, so every pixel gets a little ordered dither.
+
+    gen-wallpaper                  use the active theme
+    gen-wallpaper --base '#101014' --glow '#26262e'
+    gen-wallpaper --out ~/Pictures/custom.png
+
+Writes ~/Pictures/generated/<theme>.png and prints the path.
+"""
+
+import argparse
+import math
+import struct
+import sys
+import zlib
+from pathlib import Path
+
+HOME = Path.home()
+THEME_STATE = HOME / ".config" / "themes" / "current"
+OUT_DIR = HOME / "Pictures" / "generated"
+
+# Per-theme ground and glow. Deliberately low-contrast: a wallpaper you can
+# read windows against, not one that competes with them.
+THEMES = {
+    "terminal dark":  {"base": "#0b0b0b", "glow": "#242424"},
+    "brown dark":     {"base": "#141311", "glow": "#3a332a"},
+    # Light sides: the glow is the BRIGHTER of the pair, so the gradient
+    # still falls away toward the bottom of the screen.
+    "terminal light": {"base": "#ececec", "glow": "#ffffff"},
+    "brown light":    {"base": "#e3ddd4", "glow": "#f7f4ef"},
+}
+# Names the state file used before families had sides.
+ALIASES = {"mono": "terminal dark", "mecha": "brown dark"}
+FALLBACK = {"base": "#0b0b0b", "glow": "#242424"}
+
+W, H = 2880, 1620
+
+# 4x4 Bayer matrix, scaled to +/- a couple of levels.
+BAYER = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+]
+
+
+def hex_rgb(s):
+    s = s.lstrip("#")
+    return tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def current_theme():
+    try:
+        name = " ".join(THEME_STATE.read_text().split())
+    except OSError:
+        return "terminal dark"
+    return ALIASES.get(name, name)
+
+
+def build(base, glow, w, h):
+    br, bg, bb = base
+    gr, gg, gb = glow
+
+    # Glow sits up and left of centre, off the golden-ratio point, so it
+    # doesn't read as a symmetric "spotlight".
+    cx, cy = w * 0.34, h * 0.30
+    radius = max(w, h) * 0.85
+
+    rows = []
+    for y in range(h):
+        row = bytearray()
+        dy2 = (y - cy) ** 2
+        # Vertical falloff: slightly darker toward the bottom of the screen.
+        vfall = 1.0 - 0.35 * (y / h)
+        by = y & 3
+        for x in range(w):
+            d = math.sqrt((x - cx) ** 2 + dy2) / radius
+            t = max(0.0, 1.0 - d)
+            t = t * t * vfall           # squared = a soft, quick falloff
+
+            dither = (BAYER[by][x & 3] - 7.5) / 7.5 * 1.2
+
+            r = br + (gr - br) * t + dither
+            g = bg + (gg - bg) * t + dither
+            b = bb + (gb - bb) * t + dither
+
+            row += bytes((
+                max(0, min(255, int(r + 0.5))),
+                max(0, min(255, int(g + 0.5))),
+                max(0, min(255, int(b + 0.5))),
+            ))
+        rows.append(row)
+    return rows
+
+
+def write_png(path, rows, w, h):
+    raw = bytearray()
+    for row in rows:
+        raw.append(0)          # filter type 0 (None)
+        raw += row
+
+    def chunk(tag, data):
+        c = struct.pack(">I", len(data)) + tag + data
+        return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    png = b"\x89PNG\r\n\x1a\n"
+    png += chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+    png += chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+    png += chunk(b"IEND", b"")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(png)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--theme")
+    ap.add_argument("--base")
+    ap.add_argument("--glow")
+    ap.add_argument("--out")
+    ap.add_argument("--width", type=int, default=W)
+    ap.add_argument("--height", type=int, default=H)
+    a = ap.parse_args()
+
+    name = a.theme or current_theme()
+    pal = dict(THEMES.get(name, FALLBACK))
+    if a.base:
+        pal["base"] = a.base
+    if a.glow:
+        pal["glow"] = a.glow
+
+    out = Path(a.out).expanduser() if a.out else OUT_DIR / f"{name}.png"
+    rows = build(hex_rgb(pal["base"]), hex_rgb(pal["glow"]), a.width, a.height)
+    write_png(out, rows, a.width, a.height)
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Screenshots. What each mode leaves behind is deliberate:
+#
+#   shot            whole screen  -> PNG in ~/Pictures/Screenshots + clipboard
+#   shot region     drag a rect   -> clipboard only, no file
+#   shot edit       drag a rect   -> clipboard, then swappy; Ctrl+S there saves
+#   shot snip       drag a rect   -> PNG in ~/Pictures/Screenshots, and the
+#                                    FILE PATH on the clipboard as plain text
+#
+# Region shots are the throwaway ones -- you snip to paste something into a
+# chat and never want it again, so saving every one just fills a folder with
+# noise. A whole-screen shot is the deliberate "keep this" gesture, so that
+# one gets a file. `shot edit` splits the difference: nothing is written
+# unless you press Ctrl+S in swappy.
+#
+# `snip` exists because of one specific failure: a terminal program cannot
+# always read an image off the Wayland clipboard, so pasting a region shot
+# into a CLI agent silently does nothing and you end up describing the
+# picture in words instead. Copying the *path* sidesteps the whole question --
+# text pastes everywhere, and anything that wants the image can open the file.
+#
+# Every mode ends in a notification, so a failed capture is visible instead of
+# silent. That silence is why `grim -g "$(slurp)"` looked broken: pressing and
+# releasing Print without dragging cancels slurp, grim then gets an empty
+# geometry and exits, and nothing anywhere says so.
+set -uo pipefail
+
+mode="${1:-full}"
+dir="$HOME/Pictures/Screenshots"
+
+# Region and edit still need a file on disk -- wl-copy reads from one, swappy
+# opens one, and dunst draws one as the notification icon. It just doesn't
+# need to be a *kept* file, so it goes to the runtime dir under a fixed name:
+# overwritten by the next shot, and gone entirely at logout.
+tmp="${XDG_RUNTIME_DIR:-/tmp}/shot-preview.png"
+
+case "$mode" in
+    full)
+        mkdir -p "$dir"
+        file="$dir/$(date +%Y-%m-%d_%H-%M-%S).png"
+        grim "$file" || { notify-send -u critical "Screenshot" "grim failed"; exit 1; } ;;
+    region|edit|snip)
+        geo=$(slurp 2>/dev/null) || { notify-send "Screenshot" "cancelled"; exit 0; }
+        [ -n "$geo" ] || { notify-send "Screenshot" "cancelled"; exit 0; }
+        # snip is a keeper, so it lands in Screenshots like a full shot does;
+        # the other two stay throwaway in the runtime dir.
+        if [ "$mode" = snip ]; then
+            mkdir -p "$dir"; file="$dir/$(date +%Y-%m-%d_%H-%M-%S).png"
+        else
+            file="$tmp"
+        fi
+        grim -g "$geo" "$file" || { notify-send -u critical "Screenshot" "grim failed"; exit 1; } ;;
+    *)
+        echo "usage: shot [full|region|edit|snip]" >&2; exit 2 ;;
+esac
+
+# snip puts text on the clipboard, not the image, and then stops.
+if [ "$mode" = snip ]; then
+    printf '%s' "$file" | wl-copy
+    notify-send -i "$file" "Screenshot" "Path copied -- paste it anywhere\n$(basename "$file")"
+    exit 0
+fi
+
+# wl-copy forks and serves the image from its own memory, so the clipboard
+# survives the temp file being overwritten by the next shot.
+wl-copy < "$file"
+
+if [ "$mode" = "edit" ]; then
+    # swappy's save_dir (~/.config/swappy/config) decides where Ctrl+S lands.
+    swappy -f "$file"
+    exit 0
+fi
+
+# -i with the path makes dunst draw the shot itself as the notification icon,
+# so you can confirm you captured the right thing without opening anything.
+if [ "$mode" = "full" ]; then
+    notify-send -i "$file" "Screenshot" "Saved + copied\n$(basename "$file")"
+else
+    notify-send -i "$file" "Screenshot" "Copied to clipboard"
+fi

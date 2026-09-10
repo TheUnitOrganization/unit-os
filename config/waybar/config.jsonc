@@ -1,0 +1,193 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 48,
+  // Gaps come from each capsule's own CSS margin instead, so the space
+  // between two capsules is the same whether or not they sit in the same
+  // box -- with spacing here, the centre and right boxes touched.
+  "spacing": 0,
+
+  // Float the bar off the screen edges. This is what stops it looking
+  // glued to the corners; the glass pills sit inside this margin.
+  "margin-top": 10,
+  "margin-left": 16,
+  "margin-right": 16,
+
+  "modules-left":   ["hyprland/workspaces", "hyprland/window"],
+  // Nothing in the centre: the clock lives in the right-hand run so the order
+  // reads apps, tray, work, link, system from left to right. (waybar will
+  // only truly centre a module when the window title next to it is short
+  // enough to leave room, which it usually is not.)
+  "modules-center": [],
+  "modules-right":  ["tray", "group/work", "group/link", "group/system"],
+
+  "hyprland/workspaces": {
+    "format": "{id}",
+    "on-click": "activate",
+    "sort-by-number": true
+  },
+
+  "hyprland/window": {
+    "format": "{title}",
+    "max-length": 60,
+    "separate-outputs": true
+  },
+
+  // Groups. Each one is a single glass capsule; the modules inside it are
+  // transparent and split by a hairline (see style.css). Every module keeps
+  // its own tooltip and its own click, so nothing is lost by merging them --
+  // there are just fewer edges on screen.
+  // Just the save light now -- the AI spend moved next to the battery, which
+  // is the other "how much is left" number on the bar.
+  "group/work": {
+    "orientation": "horizontal",
+    "modules": ["custom/dots"]
+  },
+
+  // Ordered by reach, nearest first: the power mode the machine is running,
+  // the speakers in front of you, the radio on your desk, the link out of
+  // the building, then the tunnel running over it. (macOS, Windows and GNOME
+  // all run network -> volume, i.e. this capsule backwards.)
+  //
+  // Power mode sits here rather than with the battery because it is a
+  // *toggle*, and this is the capsule of toggles -- every module in it
+  // changes something on click. The system capsule next door is readings.
+  "group/link": {
+    "orientation": "horizontal",
+    "modules": ["power-profiles-daemon", "pulseaudio", "bluetooth", "network", "custom/nordvpn"]
+  },
+
+  // One capsule for everything about *this machine, right now*: which power
+  // mode is running, how much charge is left, what time it is (and where)
+  // and which layout the keyboard is in.
+  //
+  // Readings, left to right: where you are and what time it is there, the
+  // day's AI spend, the charge -- spend next to charge because both answer
+  // "how much is left" -- and the keyboard layout in the far corner, which
+  // gets it because it is the thing you reach for most. (This is where the
+  // bar parts company with macOS and Windows, which both end on the clock.)
+  //
+  // CPU and memory used to live here; btop (CTRL+SHIFT+ESC) shows both with
+  // history and per-process detail, and a number you cannot act on is not
+  // worth a pill.
+  "group/system": {
+    "orientation": "horizontal",
+    "modules": ["custom/clock", "custom/ai-usage", "battery", "custom/language"]
+  },
+
+  // Active keyboard layout, as a two-letter pill. waybar's own
+  // hyprland/language module renders an empty label on 0.15 here, so this is
+  // a script reading `hyprctl devices -j`. The interval is a safety net --
+  // the keybind and the click both signal it, so it updates instantly.
+  "custom/language": {
+    "exec": "$HOME/.config/waybar/scripts/language.sh",
+    "return-type": "json",
+    "interval": 30,
+    "signal": 10,
+    "on-click": "hyprctl switchxkblayout all next && pkill -RTMIN+10 waybar"
+  },
+
+  // Named-timezone clock. Right-click cycles Lisbon <-> Caracas.
+  // waybar's built-in clock can only print %Z (WEST / -04), so this is a
+  // small script instead: ~/.config/waybar/scripts/clock-tz.sh
+  "custom/clock": {
+    "exec": "$HOME/.config/waybar/scripts/clock-tz.sh",
+    "return-type": "json",
+    "interval": 10,
+    "signal": 8,
+    "on-click-right": "$HOME/.config/waybar/scripts/clock-tz.sh toggle && pkill -RTMIN+8 waybar"
+  },
+
+  // AI allowance usage. Bar shows the Claude 5-hour session window -- the
+  // limit that actually bites mid-session, and the one that refills on a
+  // timescale worth watching. Weekly, per-model and the other providers are
+  // in the click/SUPER+A notification.
+  "custom/ai-usage": {
+    // on-click does the same thing as SUPER+= . It also makes waybar set a
+    // pointer cursor on the pill -- waybar only does that for modules that
+    // have a click action, and there is no config option for it.
+    "on-click": "$HOME/.config/waybar/scripts/ai-notify.sh",
+    "exec": "$HOME/.config/waybar/scripts/ai-usage.py",
+    "return-type": "json",
+    "interval": 60,
+    // No hover tooltip on purpose: it printed the exact same block as the
+    // click/SUPER+A notification, in the same corner, so hovering *and*
+    // clicking put two identical panels on screen. The notification wins --
+    // it toggles, it stays put, and it works from the keyboard.
+    "tooltip": false
+  },
+
+  // Are the configs saved? Time since the last ~/.dotfiles commit; warning
+  // when tracked files changed, critical when the last save is >7 days old.
+  // Click = stage tracked changes, commit, push.
+  "custom/dots": {
+    "exec": "$HOME/.config/waybar/scripts/dots-status.sh",
+    "return-type": "json",
+    "interval": 60,
+    "signal": 9,
+    "on-click": "bash -ic 'dots-save' && pkill -RTMIN+9 waybar"
+  },
+
+  // NordVPN. The AUR package is CLI + daemon only -- it ships tray icons but
+  // no tray program -- so this is a script capsule rather than a tray entry.
+  // Sits next to network because that is what it modifies.
+  "custom/nordvpn": {
+    "exec": "$HOME/.config/waybar/scripts/nordvpn.sh",
+    "return-type": "json",
+    "interval": 10,
+    "signal": 11,
+    "on-click": "$HOME/.config/waybar/scripts/nordvpn.sh toggle && pkill -RTMIN+11 waybar"
+  },
+
+  "tray": { "icon-size": 16, "spacing": 8 },
+
+  "pulseaudio": {
+    "format": "{icon} {volume}%",
+    "format-muted": "󰝟 muted",
+    "format-icons": { "headphone": "󰋋", "default": ["󰕿", "󰖀", "󰕾"] },
+    "on-click": "pavucontrol",
+    "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+    "scroll-step": 5
+  },
+
+  "bluetooth": {
+    "format": "󰂯",
+    "format-disabled": "󰂲",
+    "format-connected": "󰂱 {num_connections}",
+    "tooltip-format": "{controller_alias}\n{device_enumerate}",
+    "on-click": "blueman-manager"
+  },
+
+  "network": {
+    "format-wifi": "󰤨 {signalStrength}%",
+    "format-ethernet": "󰈀",
+    "format-disconnected": "󰤭",
+    "tooltip-format-wifi": "{essid}  {ipaddr}",
+    "tooltip-format-ethernet": "{ifname}  {ipaddr}",
+    "on-click": "kitty -e nmtui"
+  },
+
+  // Not in any group any more -- btop replaced them. Kept so that putting
+  // either back into group/system is a one-word edit.
+  "cpu":    { "format": "󰻠 {usage}%", "interval": 5 },
+  "memory": { "format": "󰍛 {percentage}%", "interval": 5 },
+
+  "power-profiles-daemon": {
+    "format": "{icon}",
+    "tooltip-format": "Power profile: {profile}",
+    "format-icons": {
+      "default": "󰈐", "performance": "󰓅",
+      "balanced": "󰾅", "power-saver": "󰌪"
+    }
+  },
+
+  "battery": {
+    "states": { "warning": 30, "critical": 15 },
+    "format": "{icon} {capacity}%",
+    "format-charging": "󰂄 {capacity}%",
+    "format-plugged": "󰚥 {capacity}%",
+    "format-icons": ["󰁺","󰁻","󰁼","󰁽","󰁾","󰁿","󰂀","󰂁","󰂂","󰁹"],
+    "tooltip-format": "{timeTo}  ({power}W)",
+    "interval": 30
+  }
+}

@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+#
+# unit-doctor -- check this machine against what unit-os says it ships.
+#
+# The manifest is docs/what-ships.md. This script is the executable half of it:
+# every check here corresponds to something that document claims. If the two
+# disagree, one of them is a bug.
+#
+#   unit-doctor           run every check
+#   unit-doctor --fix     also offer the one-line fix for what failed
+#   unit-doctor --quiet   only show problems
+#
+set -uo pipefail
+
+REPO="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+FIX=0
+QUIET=0
+for a in "$@"; do
+  case "$a" in
+    --fix)   FIX=1 ;;
+    --quiet) QUIET=1 ;;
+    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \?//'; exit 0 ;;
+  esac
+done
+
+PASS=0 WARN=0 FAIL=0
+declare -a FIXES=()
+
+if [[ -t 1 ]]; then
+  G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; D=$'\033[2m'; B=$'\033[1m'; N=$'\033[0m'
+else
+  G= Y= R= D= B= N=
+fi
+
+section() { printf '\n%s%s%s\n' "$B" "$1" "$N"; }
+ok()   { ((PASS++)); [[ $QUIET == 1 ]] || printf '  %s✓%s %s\n' "$G" "$N" "$1"; }
+info() { [[ $QUIET == 1 ]] || printf '  %s·%s %s\n' "$D" "$N" "$1"; }
+warn() { ((WARN++)); printf '  %s!%s %s\n' "$Y" "$N" "$1"; [[ -n ${2:-} ]] && FIXES+=("$2"); }
+bad()  { ((FAIL++)); printf '  %s✗%s %s\n' "$R" "$N" "$1"; [[ -n ${2:-} ]] && FIXES+=("$2"); }
+
+# ============================================================ 1. the repo ===
+section "Repo"
+
+if [[ -d $REPO/.git ]]; then
+  ok "unit-os at $REPO"
+else
+  bad "no git repo at $REPO"
+fi
+
+branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+dirty="$(git -C "$REPO" status --porcelain 2>/dev/null | wc -l)"
+if [[ $dirty -gt 0 ]]; then
+  warn "$dirty uncommitted change(s) on $branch" "cd $REPO && git add -A && git commit"
+else
+  ok "working tree clean ($branch)"
+fi
+
+if git -C "$REPO" rev-parse '@{u}' >/dev/null 2>&1; then
+  ahead="$(git -C "$REPO" rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)"
+  if [[ ${ahead:-0} -gt 0 ]]; then
+    warn "$ahead commit(s) not pushed -- nothing is off this laptop" "cd $REPO && git push"
+  else
+    ok "pushed to $(git -C "$REPO" remote get-url origin 2>/dev/null)"
+  fi
+else
+  bad "no upstream branch -- this repo has never been pushed" "cd $REPO && git push -u origin $branch"
+fi
+
+# ========================================================== 2. no secrets ===
+section "Secrets"
+
+leak=0
+while IFS= read -r f; do
+  grep -qIE 'sk-[A-Za-z0-9]{16,}|ghp_|github_pat_|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY' \
+    "$REPO/$f" 2>/dev/null && { bad "possible secret committed: $f"; leak=1; }
+done < <(git -C "$REPO" ls-files 2>/dev/null)
+[[ $leak == 0 ]] && ok "no credentials in tracked files"
+
+if git -C "$REPO" ls-files --error-unmatch config/ai-usage/env >/dev/null 2>&1; then
+  bad "ai-usage/env is TRACKED and holds live API keys" \
+      "cd $REPO && git rm --cached config/ai-usage/env"
+else
+  ok "ai-usage/env is not tracked"
+fi
+
+# ============================================================= 3. install ===
+section "Install"
+
+linked=0 copied=0 missing=0
+for src in "$REPO"/config/*; do
+  name="$(basename "$src")"
+  [[ $name == btop ]] && continue          # templated, never linked
+  dst="$HOME/.config/$name"
+  if [[ -L $dst && "$(readlink -f "$dst")" == "$src" ]]; then
+    ((linked++))
+  elif [[ -e $dst ]]; then
+    ((copied++))
+  else
+    ((missing++)); bad "not installed: ~/.config/$name" "cd $REPO && ./install.sh --link"
+  fi
+done
+[[ $linked  -gt 0 ]] && ok "$linked config dir(s) linked to the repo"
+[[ $copied  -gt 0 ]] && info "$copied config dir(s) are copies, not links (run ./install.sh --link to link them)"
+
+binmissing=0
+for src in "$REPO"/bin/*; do
+  b="$(basename "$src")"
+  [[ -e $HOME/.local/bin/$b ]] || { ((binmissing++)); bad "not on PATH: $b" "cd $REPO && ./install.sh --link"; }
+done
+[[ $binmissing == 0 ]] && ok "all $(ls "$REPO"/bin | wc -l) commands installed"
+
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ok "~/.local/bin is on PATH" ;;
+  *) bad "~/.local/bin is NOT on PATH" 'echo "export PATH=$HOME/.local/bin:$PATH" >> ~/.bashrc' ;;
+esac
+
+# ============================================================ 4. packages ===
+section "Packages"
+
+if command -v pacman >/dev/null; then
+  for list in native aur; do
+    f="$REPO/config/unit/pkglist-$list.txt"
+    [[ -f $f ]] || continue
+    miss=()
+    while read -r p; do
+      [[ -z $p ]] && continue
+      pacman -Qq "$p" >/dev/null 2>&1 || miss+=("$p")
+    done < "$f"
+    if [[ ${#miss[@]} -eq 0 ]]; then
+      ok "$list: all $(grep -c . "$f") packages present"
+    else
+      warn "$list: ${#miss[@]} missing -- ${miss[*]:0:6}$([[ ${#miss[@]} -gt 6 ]] && echo ' …')" \
+           "sudo pacman -S --needed ${miss[*]}"
+    fi
+  done
+
+  # the lists drift the moment you install something and forget
+  drift="$(comm -13 <(sort "$REPO/config/unit/pkglist-native.txt") <(pacman -Qqen | sort) | wc -l)"
+  if [[ $drift -gt 0 ]]; then
+    warn "$drift installed package(s) are not in pkglist-native.txt" \
+         "pacman -Qqen > $REPO/config/unit/pkglist-native.txt"
+  else
+    ok "package list matches what is installed"
+  fi
+else
+  info "not an Arch system -- package checks skipped"
+fi
+
+# ========================================================== 5. the desktop ==
+section "Desktop"
+
+for b in hyprland waybar kitty rofi dunst hyprpaper hypridle hyprlock btop nvim tmux starship fzf zoxide thunar; do
+  command -v "$b" >/dev/null || bad "missing command: $b" "sudo pacman -S $b"
+done
+ok "core desktop binaries present"
+
+if command -v hyprctl >/dev/null && [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  errs="$(hyprctl configerrors 2>/dev/null)"
+  if [[ -z $errs || $errs == *"no errors"* ]]; then
+    ok "hyprctl configerrors: clean"
+  else
+    bad "Hyprland config errors:"; printf '      %s\n' "$errs" | head -5
+  fi
+  for p in waybar hyprpaper dunst hypridle; do
+    pgrep -x "$p" >/dev/null && ok "$p running" || warn "$p not running" "$p &"
+  done
+else
+  info "Hyprland not running -- live checks skipped"
+fi
+
+# ============================================================= 6. theming ===
+section "Theme"
+
+cur="$(cat "$HOME/.config/themes/current" 2>/dev/null || echo '')"
+if [[ -n $cur ]]; then
+  ok "active theme: $cur"
+else
+  warn "no active theme recorded" "theme terminal"
+fi
+
+gen_missing=()
+for f in waybar/colors.css waybar/shape.css kitty/colors.conf alacritty/colors.toml \
+         rofi/theme.rasi dunst/dunstrc hypr/colors.lua starship.toml nvim/lua/theme.lua \
+         gtk-3.0/gtk.css gtk-4.0/gtk.css; do
+  [[ -e $HOME/.config/$f ]] || gen_missing+=("$f")
+done
+if [[ ${#gen_missing[@]} -eq 0 ]]; then
+  ok "all 11 generated theme files present"
+else
+  warn "${#gen_missing[@]} generated file(s) missing: ${gen_missing[*]}" "theme ${cur:-terminal}"
+fi
+
+# ====================================================== 7. the kill switches =
+section "Safety"
+
+sysrq="$(cat /proc/sys/kernel/sysrq 2>/dev/null || echo 0)"
+[[ $sysrq == 244 ]] \
+  && ok "magic SysRq armed (244) -- ALT+PrtSc+F OOM-kills" \
+  || warn "kernel.sysrq is $sysrq, want 244" \
+          "printf 'kernel.sysrq = 244\n' | sudo tee /etc/sysctl.d/99-sysrq.conf && sudo sysctl -p /etc/sysctl.d/99-sysrq.conf"
+
+if command -v systemctl >/dev/null; then
+  systemctl is-active systemd-oomd >/dev/null 2>&1 \
+    && ok "systemd-oomd active" \
+    || warn "systemd-oomd inactive" "sudo systemctl enable --now systemd-oomd.service"
+fi
+
+nicelim="$(ulimit -e 2>/dev/null || echo 0)"
+[[ ${nicelim:-0} -ge 30 ]] \
+  && ok "negative nice allowed (btop outranks a CPU hog)" \
+  || info "nice limit not active yet -- needs one logout after install"
+
+# ------ saving stays manual. This is deliberate; flag it if it ever changes.
+if systemctl --user is-enabled dots-autosave.timer >/dev/null 2>&1; then
+  warn "dots-autosave.timer is ENABLED -- saving is meant to stay manual" \
+       "systemctl --user disable --now dots-autosave.timer"
+else
+  ok "autosave timer disabled (saving is manual, by design)"
+fi
+
+# ======================================================== 8. not ours =======
+section "External (not shipped by unit-os)"
+
+for b in herdr claude gh; do
+  if command -v "$b" >/dev/null; then
+    info "$b present -- $(command -v "$b")"
+  else
+    info "$b not installed"
+  fi
+done
+
+# ================================================================ verdict ===
+printf '\n%s%d passed%s' "$G" "$PASS" "$N"
+[[ $WARN -gt 0 ]] && printf ', %s%d warning%s' "$Y" "$WARN" "$N"
+[[ $FAIL -gt 0 ]] && printf ', %s%d failed%s' "$R" "$FAIL" "$N"
+printf '\n'
+
+if [[ ${#FIXES[@]} -gt 0 ]]; then
+  if [[ $FIX == 1 ]]; then
+    printf '\n%sSuggested fixes%s\n' "$B" "$N"
+    printf '  %s\n' "${FIXES[@]}"
+  else
+    printf '%sRun with --fix to see the %d suggested fix(es).%s\n' "$D" "${#FIXES[@]}" "$N"
+  fi
+fi
+
+[[ $FAIL -gt 0 ]] && exit 1
+exit 0

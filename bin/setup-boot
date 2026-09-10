@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+#
+# SUPERSEDED IN PART (2026-09-11). The boot menu and the autologin now live
+# in setup-grub + setup-autologin -- see ~/Documents/boot-and-login.md. The
+# machine boots GRUB, not systemd-boot, so step 5 here edits a bootloader
+# that is no longer in charge. What is still worth having from this file is
+# step 7, the kill-switch hardening, which has never run.
+#
+# setup-boot -- silent boot: hide the systemd-boot menu, show the ANIMA
+# splash instead of kernel logs, and autologin tty1 straight into Hyprland.
+# Also finishes the one block of ~/setup-finish.sh that never ran (step 5b,
+# the kill-switch hardening) -- verified missing on 2026-09-10: sysrq was
+# still the stock 16, systemd-oomd was inactive, and none of its three files
+# existed. Folded in here so it costs one password prompt instead of two.
+#
+#   sudo ~/.local/bin/setup-boot          apply
+#   sudo ~/.local/bin/setup-boot --revert undo everything
+#
+# Idempotent: safe to run twice. Every file it touches is backed up beside
+# itself as <file>.pre-setup-boot the first time only, so a revert always
+# restores the original rather than a half-applied state.
+#
+set -euo pipefail
+
+USER_NAME=januario
+THEME_SRC="/home/$USER_NAME/.local/share/plymouth/themes/anima"
+THEME_DST="/usr/share/plymouth/themes/anima"
+PARAMS="quiet splash loglevel=3 udev.log_level=3 rd.udev.log_level=3 vt.global_cursor_default=0"
+GETTY_DIR="/etc/systemd/system/getty@tty1.service.d"
+
+[[ $EUID -eq 0 ]] || { echo "run me with sudo"; exit 1; }
+
+backup() { [[ -e "$1" && ! -e "$1.pre-setup-boot" ]] && cp -a "$1" "$1.pre-setup-boot"; return 0; }
+
+# --------------------------------------------------------------------------
+revert() {
+    echo ":: reverting"
+    for f in /etc/mkinitcpio.conf /boot/loader/loader.conf /boot/loader/entries/*.conf; do
+        [[ -e "$f.pre-setup-boot" ]] && { mv "$f.pre-setup-boot" "$f"; echo "   restored $f"; }
+    done
+    rm -f "$GETTY_DIR/autologin.conf"; rmdir --ignore-fail-on-non-empty "$GETTY_DIR" 2>/dev/null || true
+    rm -f /etc/sysctl.d/99-sysrq.conf /etc/security/limits.d/10-taskmgr-nice.conf \
+          /etc/systemd/system/user@.service.d/10-oomd.conf
+    systemctl daemon-reload
+    plymouth-set-default-theme bgrt 2>/dev/null || true
+    mkinitcpio -P
+    echo ":: reverted. Reboot to confirm."
+    exit 0
+}
+[[ "${1:-}" == "--revert" ]] && revert
+
+# --------------------------------------------------------------------------
+echo ":: 1/7  plymouth"
+pacman -S --needed --noconfirm plymouth
+
+echo ":: 2/7  ANIMA theme -> $THEME_DST"
+install -d "$THEME_DST"
+install -m644 "$THEME_SRC"/{anima.plymouth,anima.script,mark.png,glow.png} "$THEME_DST/"
+plymouth-set-default-theme anima
+
+echo ":: 3/7  mkinitcpio hook"
+backup /etc/mkinitcpio.conf
+# The plymouth hook must sit after udev (it needs the device nodes) and
+# before autodetect, so autodetect keeps the modules plymouth pulls in.
+if ! grep -qE '^HOOKS=.*\bplymouth\b' /etc/mkinitcpio.conf; then
+    sed -i -E 's/^(HOOKS=\(base udev)( )/\1 plymouth\2/' /etc/mkinitcpio.conf
+fi
+grep -E '^HOOKS=' /etc/mkinitcpio.conf | sed 's/^/   /'
+
+echo ":: 4/7  kernel parameters"
+shopt -s nullglob
+for e in /boot/loader/entries/*.conf; do
+    backup "$e"
+    if grep -q '^options ' "$e"; then
+        for p in $PARAMS; do
+            key=${p%%=*}
+            grep -qE "^options .*(^| )${key}(=| |$)" "$e" || sed -i -E "s|^(options .*)$|\1 $p|" "$e"
+        done
+    fi
+    echo "   $(basename "$e"): $(grep -m1 '^options ' "$e" || echo '(no options line)')"
+done
+
+echo ":: 5/7  systemd-boot menu"
+backup /boot/loader/loader.conf
+# timeout 0 hides the menu entirely; holding SPACE (or any key) during
+# firmware handoff still brings it up, which is how Windows stays reachable.
+# `editor no` stops anyone at the keyboard appending init=/bin/sh.
+{
+    echo "# written by setup-boot"
+    echo "timeout 0"
+    echo "console-mode max"
+    echo "editor no"
+    grep -E '^default ' /boot/loader/loader.conf.pre-setup-boot 2>/dev/null || \
+        printf 'default %s\n' "$(basename "$(ls -1 /boot/loader/entries/*.conf | grep -v fallback | head -1)")"
+} > /boot/loader/loader.conf
+sed 's/^/   /' /boot/loader/loader.conf
+
+echo ":: 6/7  autologin on tty1"
+# .bash_profile already execs `uwsm start hyprland.desktop` on tty1, so
+# autologin here means power -> Hyprland with nothing in between. The disk is
+# not encrypted, so this password was not protecting data at rest anyway;
+# hyprlock (SUPER+L, and on idle) is where the password still does work.
+install -d "$GETTY_DIR"
+cat > "$GETTY_DIR/autologin.conf" <<EOF
+[Unit]
+After=plymouth-quit-wait.service
+
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/agetty --autologin $USER_NAME --noclear %I \$TERM
+EOF
+systemctl daemon-reload
+
+echo ":: 7/7  kill-switch hardening (the missing setup-finish.sh step 5b)"
+# Three independent ways out of a machine that has stopped responding,
+# cheapest first.
+#
+# a) systemd-oomd kills the worst cgroup before the box starts swap-thrashing,
+#    so in practice you rarely reach for b) or c). Watches zram swap pressure.
+systemctl enable --now systemd-oomd.service
+install -d /etc/systemd/system/user@.service.d
+printf '%s\n' '[Service]' 'ManagedOOMMemoryPressure=kill' 'ManagedOOMMemoryPressureLimit=60%' \
+    > /etc/systemd/system/user@.service.d/10-oomd.conf
+#
+# b) btop (CTRL+SHIFT+ESC) at negative nice, so the task manager outranks the
+#    runaway process for CPU time. PAM sets RLIMIT_NICE at login, so this only
+#    takes effect after the next log-in; until then `nice -n -10` prints a
+#    warning and runs at 0, so the bind never fails.
+install -d /etc/security/limits.d
+printf '%s\n' 'januario  -  nice  -10' > /etc/security/limits.d/10-taskmgr-nice.conf
+#
+# c) Magic SysRq: ALT+SysRq+F asks the KERNEL to OOM-kill the biggest memory
+#    hog, and works even when the compositor itself is frozen solid.
+#    244 = keyboard(4) + sync(16) + remount-ro(32) + signal/oom(64) + reboot(128).
+#    Stock Arch ships 16 (sync only), which is why ALT+SysRq+F does nothing.
+printf '%s\n' 'kernel.sysrq = 244' > /etc/sysctl.d/99-sysrq.conf
+sysctl -q -p /etc/sysctl.d/99-sysrq.conf
+systemctl daemon-reload
+echo "   sysrq=$(cat /proc/sys/kernel/sysrq)  oomd=$(systemctl is-active systemd-oomd)"
+
+echo ":: rebuilding initramfs"
+mkinitcpio -P
+
+cat <<'EOF'
+
+done. Reboot to see it.
+
+  boot menu   hold SPACE at power-on to pick Windows
+  recovery    Ctrl+Alt+F2 for a plain TTY if Hyprland will not start
+  undo        sudo ~/.local/bin/setup-boot --revert
+
+~/setup-finish.sh is now fully applied and can be deleted:
+  rm ~/setup-finish.sh && dots rm --cached setup-finish.sh
+EOF

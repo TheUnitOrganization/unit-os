@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Rebuild this desktop on a fresh Arch install.
+#   1. install Arch (archinstall is fine), boot, log in, connect wifi
+#   2. sudo pacman -S git base-devel
+#   3. git clone --bare git@github.com:<you>/dotfiles.git ~/.dotfiles
+#   4. git --git-dir=$HOME/.dotfiles --work-tree=$HOME checkout
+#   5. bash ~/.local/bin/bootstrap-desktop
+set -uo pipefail
+M="$HOME/.config/unit"
+
+echo "==> repo packages"
+sudo pacman -S --needed --noconfirm - < "$M/pkglist-native.txt"
+
+echo "==> AUR helper (yay), then AUR packages"
+if ! command -v yay >/dev/null; then
+  tmp=$(mktemp -d); git clone https://aur.archlinux.org/yay-bin.git "$tmp/yay-bin"
+  (cd "$tmp/yay-bin" && makepkg -si --noconfirm)
+fi
+yay -S --needed --noconfirm --answerclean None --answerdiff None --answeredit None - < "$M/pkglist-aur.txt"
+
+echo "==> services"
+sudo systemctl enable --now power-profiles-daemon bluetooth
+systemctl --user enable --now pipewire pipewire-pulse wireplumber 2>/dev/null
+
+echo "==> kill-switch hardening"
+# Lived in ~/setup-finish.sh, which was a one-shot and is gone. Without these
+# a runaway process can take the whole session with it: oomd kills the worst
+# cgroup early, the nice limit lets btop (CTRL+SHIFT+ESC) outrank a CPU hog,
+# and sysrq=244 arms ALT+SysRq+F to OOM-kill from the kernel even when the
+# compositor is frozen. Stock Arch ships sysrq=16, sync only.
+sudo systemctl enable --now systemd-oomd.service
+sudo install -d /etc/systemd/system/user@.service.d /etc/security/limits.d
+printf '%s\n' '[Service]' 'ManagedOOMMemoryPressure=kill' 'ManagedOOMMemoryPressureLimit=60%' \
+  | sudo tee /etc/systemd/system/user@.service.d/10-oomd.conf >/dev/null
+printf '%s\n' "$USER  -  nice  -10" \
+  | sudo tee /etc/security/limits.d/10-taskmgr-nice.conf >/dev/null
+printf '%s\n' 'kernel.sysrq = 244' | sudo tee /etc/sysctl.d/99-sysrq.conf >/dev/null
+sudo sysctl -q -p /etc/sysctl.d/99-sysrq.conf
+sudo systemctl daemon-reload
+
+echo "==> user dirs, desktop database, generated theme files"
+xdg-user-dirs-update
+update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
+"$HOME/.local/bin/theme" "$(cat "$HOME/.config/themes/current" 2>/dev/null || echo mono)"
+
+echo "==> neovim plugins (vim.pack fetches on first start)"
+nvim --headless -c quitall
+
+echo "==> wallpapers"
+mkdir -p "$HOME/Pictures/wallpapers"
+if [ ! -d "$HOME/Pictures/wallpapers/mono" ]; then
+  git clone -q --depth 1 --filter=blob:none --sparse https://github.com/dharmx/walls /tmp/walls
+  (cd /tmp/walls && git sparse-checkout set monochrome minimal)
+  mkdir -p "$HOME/Pictures/wallpapers/mono"
+  cp /tmp/walls/monochrome/* /tmp/walls/minimal/* "$HOME/Pictures/wallpapers/mono/"; rm -rf /tmp/walls
+fi
+
+echo
+echo "Done. Log out and back in (or reboot) so Hyprland autostart runs."
+echo "Then: gh auth login  |  opencode auth login  |  theme <name>"

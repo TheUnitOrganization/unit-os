@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Build a thin Papirus folder-colour variant under $HOME.
+
+    papirus-variant <name> <base-theme> <colour> [category=colour ...]
+    papirus-variant Papirus-Bun  Papirus      pink
+    papirus-variant Papirus-Mono Papirus-Dark grey documents=blue music=violet
+
+Creates ~/.local/share/icons/<name>: an icon theme that inherits everything
+from <base-theme> and overrides only the folder icons with Papirus's own
+`folder-<colour>-*` artwork. It lives in $HOME rather than going through
+`papirus-folders`, which rewrites symlinks under /usr/share, needs root, and
+is undone by every papirus-icon-theme update.
+
+Plain folders -- and Home and Desktop, which Papirus files under the `user-`
+prefix -- get <colour>. Each `category=colour` pair then repaints one kind of
+folder in its own hue: `documents=blue` links Papirus's `folder-blue-documents*`
+artwork in as `folder-documents*`, so Documents reads blue in the sidebar while
+everything else stays neutral. A category with no artwork in that hue is
+reported and skipped rather than silently dropped.
+
+Rerun after updating papirus-icon-theme.
+"""
+import os
+import shutil
+import sys
+from pathlib import Path
+
+ICONS = Path.home() / ".local/share/icons"
+
+# Papirus splits its "places" artwork over two prefixes: everything is
+# `folder-*` except Home and Desktop, which are `user-*`.
+PREFIXES = ("folder", "user")
+
+# Papirus is not consistent about a few names across hues -- teal ships
+# `folder-teal-public` but no `folder-teal-publicshare`, which is the name GTK
+# actually asks for. Rather than let those fall through to the base theme's
+# grey, fill each gap from the nearest equivalent in the same hue.
+ALIASES = {
+    "folder-publicshare": ("folder-public",),
+    "folder-videos":      ("folder-video",),
+    "folder-downloads":   ("folder-download",),
+    "folder-download":    ("folder-downloads",),
+    "folder-pictures":    ("folder-photo", "folder-image"),
+}
+
+
+def recipe(base, color, cats):
+    """The exact inputs that produced a theme, so `theme` can spot a stale one."""
+    pairs = " ".join(f"{k}={v}" for k, v in sorted(cats.items()))
+    return f"{base} {color} {pairs}".strip() + "\n"
+
+
+def variants(places, prefix, color, category=None):
+    """Yield (source svg, target filename) for one prefix/colour/category."""
+    stem = "-".join(x for x in (prefix, color, category) if x)
+    keep = "-".join(x for x in (prefix, category) if x)
+    for svg in sorted(places.glob(stem + "*.svg")):
+        rest = svg.name[len(stem):]
+        # `folder-pinkish-*` is not `folder-pink`, and `folder-green-downloads`
+        # is not `folder-green-download`: the tail has to be a real separator.
+        if rest and not rest.startswith(("-", ".")):
+            continue
+        yield svg, (keep + ".svg" if rest == ".svg" else keep + rest)
+
+
+def build(name, base, color, cats=None, quiet=False):
+    cats = cats or {}
+    src = Path("/usr/share/icons") / base
+    if not src.is_dir():
+        sys.exit(f"{src} not found -- install papirus-icon-theme first")
+
+    dest = ICONS / name
+    if dest.exists():
+        shutil.rmtree(dest)
+
+    dirs, linked, painted = [], 0, {k: 0 for k in cats}
+    for size_dir in sorted(src.iterdir()):
+        places = size_dir / "places"
+        if not places.is_dir():
+            continue
+        out = dest / size_dir.name / "places"
+        out.mkdir(parents=True)
+
+        def link(svg, target):
+            dst = out / target
+            if dst.is_symlink() or dst.exists():
+                dst.unlink()
+            dst.symlink_to(svg.resolve())
+
+        n = 0
+        for prefix in PREFIXES:
+            for svg, target in variants(places, prefix, color):
+                link(svg, target)
+                n += 1
+        # Category hues land after the base coat, overwriting it.
+        for category, hue in cats.items():
+            for prefix in PREFIXES:
+                for svg, target in variants(places, prefix, hue, category):
+                    link(svg, target)
+                    painted[category] += 1
+                    n += 1
+
+        # Fill the gaps Papirus leaves in some hues, in that hue.
+        for target, sources in ALIASES.items():
+            if (out / f"{target}.svg").exists():
+                continue
+            category = target.split("-", 1)[1]
+            hue = cats.get(category, color)
+            for src_name in sources:
+                prefix, _, src_cat = src_name.partition("-")
+                cand = places / f"{prefix}-{hue}-{src_cat}.svg"
+                if cand.exists():
+                    link(cand, f"{target}.svg")
+                    n += 1
+                    break
+
+        if n:
+            dirs.append(f"{size_dir.name}/places")
+            linked += n
+        else:
+            shutil.rmtree(dest / size_dir.name)
+
+    if not linked:
+        shutil.rmtree(dest, ignore_errors=True)
+        sys.exit(f"no folder-{color}* icons in {base}")
+
+    inherits = [base] + [t for t in ("Papirus", "Adwaita", "hicolor") if t != base]
+
+    def spec(d):
+        size = d.split("/")[0]
+        px, _, scale = size.partition("@")
+        s = f"[{d}]\nSize={px.split('x')[0]}\nContext=Places\nType=Fixed\n"
+        if scale:
+            s += f"Scale={scale.rstrip('x')}\n"
+        return s
+
+    hues = ", ".join(f"{k} {v}" for k, v in sorted(cats.items()))
+    (dest / "index.theme").write_text(
+        "[Icon Theme]\n"
+        f"Name={name}\n"
+        f"Comment={base} with {color} folders"
+        + (f" ({hues})" if hues else "") + "\n"
+        f"Inherits={','.join(inherits)}\n"
+        f"Directories={','.join(dirs)}\n\n"
+        + "\n".join(spec(d) for d in dirs))
+    (dest / ".recipe").write_text(recipe(base, color, cats))
+
+    os.system(f"gtk-update-icon-cache -q -f -t {dest} 2>/dev/null")
+
+    missing = [k for k, v in painted.items() if not v]
+    if missing:
+        print(f"{name}: no artwork for " +
+              ", ".join(f"{k}={cats[k]}" for k in missing), file=sys.stderr)
+    if not quiet:
+        print(f"{name}: {linked} icons across {len(dirs)} sizes "
+              f"({base} + {color}" + (f", {len(cats) - len(missing)} hues)" if cats else ")"))
+    return dest
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if len(args) < 3:
+        sys.exit(__doc__)
+    pairs = {}
+    for a in args[3:]:
+        if "=" not in a:
+            sys.exit(f"expected category=colour, got: {a}")
+        k, v = a.split("=", 1)
+        pairs[k] = v
+    build(args[0], args[1], args[2], pairs)

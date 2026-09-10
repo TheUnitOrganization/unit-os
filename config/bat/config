@@ -1,0 +1,5 @@
+# Use the terminal's own 16 colours instead of bat's built-in themes, so bat
+# inherits the mecha-no-onna palette and can never reintroduce a green.
+--theme="ansi"
+--style="numbers,changes"
+--paging=never

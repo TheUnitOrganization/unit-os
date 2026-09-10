@@ -1,0 +1,525 @@
+<title>Keys for This Machine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  :root {
+    --bg:        #f3ebd7;
+    --surface:   #ece2c9;
+    --raised:    #e3d7ba;
+    --line:      rgba(42, 40, 35, 0.16);
+    --line-soft: rgba(42, 40, 35, 0.08);
+    --text:      #24221d;
+    --muted:     #6f6858;
+    --accent:    #8a6a33;
+    --key-face:  #fdfaf1;
+    --key-edge:  #cabe9f;
+    --key-shadow: rgba(42, 40, 35, 0.30);
+    --warn:      #a8452f;
+
+    --mono: "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  :root:not([data-theme="light"]) {
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #14130f;
+      --surface:   #1c1b19;
+      --raised:    #24221d;
+      --line:      rgba(240, 228, 197, 0.16);
+      --line-soft: rgba(240, 228, 197, 0.07);
+      --text:      #f0e4c5;
+      --muted:     #a89984;
+      --accent:    #d4bd99;
+      --key-face:  #2c2924;
+      --key-edge:  #443f36;
+      --key-shadow: rgba(0, 0, 0, 0.55);
+      --warn:      #d94e38;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:        #14130f;
+    --surface:   #1c1b19;
+    --raised:    #24221d;
+    --line:      rgba(240, 228, 197, 0.16);
+    --line-soft: rgba(240, 228, 197, 0.07);
+    --text:      #f0e4c5;
+    --muted:     #a89984;
+    --accent:    #d4bd99;
+    --key-face:  #2c2924;
+    --key-edge:  #443f36;
+    --key-shadow: rgba(0, 0, 0, 0.55);
+    --warn:      #d94e38;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 72px;
+  }
+
+  /* ---------- header ---------- */
+  header { border-bottom: 1px solid var(--line); padding-bottom: 24px; }
+
+  h1 {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: clamp(1.5rem, 4vw, 2.1rem);
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+
+  .sub { color: var(--muted); margin: 0; max-width: 62ch; }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    margin-top: 18px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .facts li {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+
+  /* ---------- filter ---------- */
+  .tools {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg);
+    padding-block: 14px;
+    border-bottom: 1px solid var(--line-soft);
+    margin-bottom: 8px;
+  }
+
+  .tools-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  #filter {
+    flex: 1 1 220px;
+    min-width: 0;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 12px;
+  }
+
+  #filter::placeholder { color: var(--muted); }
+  #filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  nav { display: flex; gap: 4px; flex-wrap: wrap; }
+
+  nav a {
+    font-family: var(--mono);
+    font-size: 12px;
+    text-decoration: none;
+    color: var(--muted);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 6px 10px;
+  }
+
+  nav a:hover, nav a:focus-visible {
+    color: var(--text);
+    border-color: var(--line);
+    outline: none;
+  }
+
+  #count { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 40px; scroll-margin-top: 76px; }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 4px;
+  }
+
+  .section-note { color: var(--muted); font-size: 13.5px; margin: 0 0 20px; max-width: 62ch; }
+
+  h3 {
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 600;
+    margin: 26px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  /* ---------- key rows ---------- */
+  .rows { display: flex; flex-direction: column; }
+
+  .row {
+    display: grid;
+    grid-template-columns: minmax(150px, 240px) 1fr;
+    gap: 12px 20px;
+    align-items: baseline;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .row:last-child { border-bottom: none; }
+  .row .what { color: var(--text); }
+  .row .what em { color: var(--muted); font-style: normal; }
+
+  kbd {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--key-face);
+    border: 1px solid var(--key-edge);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    padding: 2px 7px;
+    white-space: nowrap;
+    box-shadow: 0 1px 0 var(--key-shadow);
+  }
+
+  .keys { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .plus { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left-width: 3px;
+    border-left-color: var(--accent);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 20px;
+    font-size: 13.5px;
+  }
+
+  .callout strong { font-weight: 600; }
+
+  .flow {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 18px;
+    overflow-x: auto;
+    line-height: 1.9;
+  }
+
+  .flow .c { color: var(--muted); }
+
+  footer {
+    margin-top: 52px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .paths { display: grid; gap: 4px; margin-top: 10px; font-family: var(--mono); font-size: 12px; }
+
+  .empty { color: var(--muted); font-family: var(--mono); font-size: 13px; padding: 20px 0; display: none; }
+  .empty.on { display: block; }
+
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 1fr; gap: 4px; padding: 9px 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <h1>Keys for This Machine</h1>
+    <p class="sub">Every binding on this Arch + Hyprland install — window manager, terminal, and editor. Type in the filter to narrow it down.</p>
+    <ul class="facts">
+      <li>Hyprland 0.56 · Lua config</li>
+      <li>eDP-1 2880×1620@120 · scale 2</li>
+      <li>kitty · bash · tmux · Neovim 0.12</li>
+      <li>mecha-no-onna</li>
+    </ul>
+  </header>
+
+  <div class="tools">
+    <div class="tools-row">
+      <input id="filter" type="text" placeholder="filter — try 'workspace', 'paste', 'delete'" autocomplete="off" spellcheck="false">
+      <nav>
+        <a href="#hyprland">Hyprland</a>
+        <a href="#terminal">Terminal</a>
+        <a href="#neovim">Neovim</a>
+      </nav>
+      <span id="count"></span>
+    </div>
+  </div>
+
+  <p class="empty" id="empty">Nothing matches that.</p>
+
+  <!-- ============ HYPRLAND ============ -->
+  <section id="hyprland">
+    <h2>Hyprland</h2>
+    <p class="section-note"><kbd>SUPER</kbd> is the Windows key. Config is Lua, split across <code>~/.config/hypr/</code>. After an edit, check <code>hyprctl configerrors</code>.</p>
+
+    <h3>Launch</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>Q</kbd></span><span class="what">Terminal — kitty</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>Q</kbd></span><span class="what">Second terminal — ghostty <em>(for comparison)</em></span></div>
+      <div class="row"><span class="keys"><kbd>CTRL</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>ESC</kbd></span><span class="what">Task manager — btop, floating <em>(k kill · t terminate · f filter · m/c sort)</em></span></div>
+      <div class="row"><span class="keys"><kbd>ALT</kbd><span class="plus">+</span><kbd>SysRq</kbd><span class="plus">+</span><kbd>F</kbd></span><span class="what">Kernel OOM-kill the biggest memory hog <em>(works even when the desktop is frozen; after setup-finish.sh)</em></span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>R</kbd></span><span class="what">App launcher — rofi</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>CTRL</kbd><span class="plus">+</span><kbd>SPACE</kbd></span><span class="what">Same launcher <em>— the GlazeWM binding from Windows</em></span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>E</kbd></span><span class="what">File manager — Thunar</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>B</kbd></span><span class="what">Browser — Brave</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>C</kbd></span><span class="what">Claude Code in a new kitty window</span></div>
+    </div>
+
+    <h3>Windows</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>W</kbd></span><span class="what">Close window</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>F</kbd></span><span class="what">Fullscreen</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>F</kbd></span><span class="what">Maximise <em>— keeps the bar visible</em></span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>V</kbd></span><span class="what">Toggle floating</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>T</kbd></span><span class="what">Toggle split direction</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>P</kbd></span><span class="what">Pseudo-tile</span></div>
+    </div>
+
+    <h3>Move around</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span class="what">Focus left / down / up / right</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>← ↓ ↑ →</kbd></span><span class="what">Same, with arrows</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span class="what">Move the window itself</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>drag</kbd></span><span class="what">Left-drag moves a window, right-drag resizes it</span></div>
+    </div>
+
+    <h3>Workspaces</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>1</kbd>…<kbd>0</kbd></span><span class="what">Go to workspace 1–10</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>1</kbd>…<kbd>0</kbd></span><span class="what">Send the window to that workspace</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>scroll</kbd></span><span class="what">Next / previous workspace</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>S</kbd></span><span class="what">Toggle the scratchpad</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>S</kbd></span><span class="what">Throw the window into the scratchpad</span></div>
+    </div>
+
+    <h3>Screen &amp; session</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>PRINT</kbd></span><span class="what">Drag a region → opens in swappy to annotate</span></div>
+      <div class="row"><span class="keys"><kbd>SHIFT</kbd><span class="plus">+</span><kbd>PRINT</kbd></span><span class="what">Whole screen straight to the clipboard</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>V</kbd></span><span class="what">Clipboard history <em>— cliphist through rofi</em></span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>ALT</kbd><span class="plus">+</span><kbd>L</kbd></span><span class="what">Lock now — hyprlock</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>E</kbd></span><span class="what">Logout menu — wlogout</span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>Z</kbd></span><span class="what">Switch the bar clock between Lisbon and Caracas <em>— Z for zone; same as right-clicking the clock. The system clock stays on Portugal time.</em></span></div>
+      <div class="row"><span class="keys"><kbd>SUPER</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>SPACE</kbd></span><span class="what">Next keyboard layout: US → PT → ES <em>— the two-letter pill next to the clock shows which; click it to cycle too</em></span></div>
+      <div class="row"><span class="keys"><kbd>right-click clock</kbd></span><span class="what">Switch the bar between Lisbon and Caracas</span></div>
+    </div>
+
+    <div class="callout">
+      <strong>Idle behaviour.</strong> Dims at 5 minutes, locks at 10, screen off at 15. No auto-suspend — that stays off until a manual <code>systemctl suspend</code> is confirmed to resume cleanly on this laptop.
+    </div>
+
+    <h3>Commands worth knowing</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><code>hyprctl configerrors</code></span><span class="what">Did that config edit break something?</span></div>
+      <div class="row"><span class="keys"><code>hyprctl monitors</code></span><span class="what">Resolution, refresh rate, scale</span></div>
+      <div class="row"><span class="keys"><code>hyprctl clients</code></span><span class="what">Every open window with its class and title</span></div>
+      <div class="row"><span class="keys"><code>hyprctl dispatch '…'</code></span><span class="what">Run a binding's action live, e.g. <code>hl.dsp.window.fullscreen()</code></span></div>
+      <div class="row"><span class="keys"><code>hyprctl hyprpaper listactive</code></span><span class="what">Which wallpaper is up <em>(they rotate every 15 min)</em></span></div>
+    </div>
+  </section>
+
+  <!-- ============ TERMINAL ============ -->
+  <section id="terminal">
+    <h2>Terminal</h2>
+    <p class="section-note">kitty for the window, bash for the shell, tmux for splits and sessions.</p>
+
+    <h3>kitty</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>select with mouse</kbd></span><span class="what">Copies to the clipboard automatically</span></div>
+      <div class="row"><span class="keys"><kbd>right-click</kbd></span><span class="what">Paste</span></div>
+      <div class="row"><span class="keys"><kbd>CTRL</kbd><span class="plus">+</span><kbd>SHIFT</kbd><span class="plus">+</span><kbd>V</kbd></span><span class="what">Paste — also <kbd>SHIFT</kbd><span class="plus">+</span><kbd>INSERT</kbd></span></div>
+      <div class="row"><span class="keys"><kbd>SHIFT</kbd><span class="plus">+</span><kbd>ENTER</kbd></span><span class="what">Newline instead of submitting <em>— Claude Code, REPLs</em></span></div>
+      <div class="row"><span class="keys"><kbd>CTRL</kbd><span class="plus">+</span><kbd>+ − 0</kbd></span><span class="what">Font bigger / smaller / reset</span></div>
+    </div>
+
+    <h3>bash</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>CTRL</kbd><span class="plus">+</span><kbd>R</kbd></span><span class="what">Fuzzy-search command history</span></div>
+      <div class="row"><span class="keys"><kbd>CTRL</kbd><span class="plus">+</span><kbd>T</kbd></span><span class="what">Fuzzy-pick a file into the current command</span></div>
+      <div class="row"><span class="keys"><kbd>ALT</kbd><span class="plus">+</span><kbd>C</kbd></span><span class="what">Fuzzy-cd into a subdirectory</span></div>
+      <div class="row"><span class="keys"><kbd>CTRL</kbd><span class="plus">+</span><kbd>A</kbd> <kbd>CTRL</kbd><span class="plus">+</span><kbd>E</kbd></span><span class="what">Jump to start / end of the line</span></div>
+      <div class="row"><span class="keys"><kbd>CTRL</kbd><span class="plus">+</span><kbd>W</kbd></span><span class="what">Delete the word behind the cursor</span></div>
+      <div class="row"><span class="keys"><code>z &lt;part-of-dir&gt;</code></span><span class="what">Jump to a directory you've visited before — zoxide</span></div>
+      <div class="row"><span class="keys"><code>ll</code> · <code>lg</code> · <code>cfg</code></span><span class="what">Long listing · lazygit · cd to ~/.config</span></div>
+      <div class="row"><span class="keys"><code>cat</code> · <code>vim</code></span><span class="what">Aliased to bat and nvim</span></div>
+    </div>
+
+    <h3>tmux</h3>
+    <p class="section-note">Prefix is <kbd>CTRL</kbd><span class="plus">+</span><kbd>A</kbd>. Press it, release, then the next key.</p>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>prefix</kbd><span class="plus">then</span><kbd>D</kbd></span><span class="what"><strong>The dev layout</strong> — agent pane left, Neovim right</span></div>
+      <div class="row"><span class="keys"><kbd>prefix</kbd><span class="plus">then</span><kbd>|</kbd></span><span class="what">Split left / right</span></div>
+      <div class="row"><span class="keys"><kbd>prefix</kbd><span class="plus">then</span><kbd>-</kbd></span><span class="what">Split top / bottom</span></div>
+      <div class="row"><span class="keys"><kbd>prefix</kbd><span class="plus">then</span><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span class="what">Move between panes <em>(capitals resize)</em></span></div>
+      <div class="row"><span class="keys"><kbd>prefix</kbd><span class="plus">then</span><kbd>C</kbd></span><span class="what">New window (tab) — <kbd>N</kbd> / <kbd>P</kbd> to cycle</span></div>
+      <div class="row"><span class="keys"><kbd>prefix</kbd><span class="plus">then</span><kbd>D</kbd></span><span class="what">Detach — the session keeps running</span></div>
+      <div class="row"><span class="keys"><kbd>prefix</kbd><span class="plus">then</span><kbd>[</kbd></span><span class="what">Scroll back; <kbd>V</kbd> select, <kbd>Y</kbd> copy, <kbd>Q</kbd> quit</span></div>
+      <div class="row"><span class="keys"><code>tmux a</code></span><span class="what">Re-attach to the last session</span></div>
+    </div>
+
+    <div class="flow">
+tmux              <span class="c"># start</span>
+prefix + D        <span class="c"># agent left, nvim right</span>
+prefix + C        <span class="c"># a new tab per task</span>
+prefix + D        <span class="c"># detach; everything keeps running</span>
+tmux a            <span class="c"># come back to it</span>
+    </div>
+  </section>
+
+  <!-- ============ NEOVIM ============ -->
+  <section id="neovim">
+    <h2>Neovim</h2>
+    <p class="section-note">A hand-written config, about 150 lines, on Neovim 0.12's built-in <code>vim.pack</code>. Five plugins, no distribution. Leader is <kbd>SPACE</kbd>.</p>
+
+    <h3>The ten that matter</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>I</kbd> <span class="plus">…</span> <kbd>ESC</kbd></span><span class="what"><strong>The whole trick.</strong> <kbd>I</kbd> starts typing, <kbd>ESC</kbd> stops. In normal mode the letters are commands, not text.</span></div>
+      <div class="row"><span class="keys"><code>:w</code> <code>:q</code> <code>:q!</code></span><span class="what">Write · quit · quit throwing changes away</span></div>
+      <div class="row"><span class="keys"><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span class="what">Left, down, up, right — the same keys as Hyprland and tmux</span></div>
+      <div class="row"><span class="keys"><kbd>D</kbd><kbd>D</kbd></span><span class="what">Delete the line. <code>3dd</code> deletes three.</span></div>
+      <div class="row"><span class="keys"><kbd>Y</kbd><kbd>Y</kbd> <span class="plus">/</span> <kbd>P</kbd></span><span class="what">Copy a line / paste it after the cursor</span></div>
+      <div class="row"><span class="keys"><kbd>U</kbd> <span class="plus">/</span> <kbd>CTRL</kbd><span class="plus">+</span><kbd>R</kbd></span><span class="what">Undo / redo <em>— undo survives quitting</em></span></div>
+      <div class="row"><span class="keys"><code>/word</code> <span class="plus">then</span> <kbd>N</kbd></span><span class="what">Search, then next hit</span></div>
+      <div class="row"><span class="keys"><kbd>G</kbd><kbd>G</kbd> <span class="plus">/</span> <kbd>G</kbd></span><span class="what">Top / bottom of file. <code>:42</code> jumps to line 42.</span></div>
+      <div class="row"><span class="keys"><kbd>W</kbd> <kbd>B</kbd> <kbd>0</kbd> <kbd>$</kbd></span><span class="what">Word forward, word back, start of line, end of line</span></div>
+      <div class="row"><span class="keys"><code>ciw</code></span><span class="what"><strong>Change inner word</strong> — deletes the word under the cursor and starts typing</span></div>
+    </div>
+
+    <div class="callout">
+      <strong>Why the last one matters.</strong> Vim is a grammar: verb + noun. Verbs are <code>d</code> delete, <code>c</code> change, <code>y</code> yank. Nouns are <code>w</code> word, <code>iw</code> inner word, <code>i"</code> inside quotes, <code>ip</code> paragraph. They multiply — <code>d2w</code>, <code>ci"</code>, <code>yap</code>, <code>di(</code> all fall out of the ten above without being memorised separately.
+    </div>
+
+    <h3>This config's keys</h3>
+    <div class="rows">
+      <div class="row"><span class="keys"><kbd>SPACE</kbd><span class="plus">+</span><kbd>W</kbd> <span class="plus">/</span> <kbd>Q</kbd></span><span class="what">Save / quit</span></div>
+      <div class="row"><span class="keys"><kbd>-</kbd></span><span class="what">File browser (oil) — it's a normal buffer. Rename by editing the line, <code>dd</code> to delete, <code>:w</code> to apply.</span></div>
+      <div class="row"><span class="keys"><kbd>SPACE</kbd><span class="plus">+</span><kbd>F</kbd></span><span class="what">Find files</span></div>
+      <div class="row"><span class="keys"><kbd>SPACE</kbd><span class="plus">+</span><kbd>G</kbd></span><span class="what">Grep the whole project — ripgrep</span></div>
+      <div class="row"><span class="keys"><kbd>SPACE</kbd><span class="plus">+</span><kbd>B</kbd> <span class="plus">/</span> <kbd>R</kbd></span><span class="what">Open buffers / recent files</span></div>
+      <div class="row"><span class="keys"><kbd>SPACE</kbd><span class="plus">+</span><kbd>G</kbd><kbd>G</kbd></span><span class="what">Git — status, diff, stage, commit (neogit)</span></div>
+      <div class="row"><span class="keys"><kbd>CTRL</kbd><span class="plus">+</span><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span class="what">Move between splits</span></div>
+      <div class="row"><span class="keys"><kbd>G</kbd><kbd>D</kbd> <span class="plus">/</span> <kbd>K</kbd></span><span class="what">Go to definition / hover docs <em>(needs an LSP attached)</em></span></div>
+    </div>
+
+    <div class="callout">
+      <strong>Stuck?</strong> Press <kbd>ESC</kbd> twice. If that fails, <code>:q!</code> then Enter quits without saving.
+    </div>
+  </section>
+
+  <footer>
+    Everything here comes from these files — edit them, don't fight them:
+    <div class="paths">
+      <span>~/.config/hypr/binds.lua &nbsp;·&nbsp; looks.lua &nbsp;·&nbsp; autostart.lua</span>
+      <span>~/.config/waybar/config.jsonc &nbsp;·&nbsp; style.css</span>
+      <span>~/.config/kitty/kitty.conf &nbsp;·&nbsp; ~/.bashrc &nbsp;·&nbsp; ~/.config/tmux/tmux.conf</span>
+      <span>~/.config/nvim/init.lua</span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var input = document.getElementById('filter');
+    var count = document.getElementById('count');
+    var empty = document.getElementById('empty');
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.row'));
+    var total = rows.length;
+
+    rows.forEach(function (r) { r.dataset.hay = r.textContent.toLowerCase(); });
+
+    function apply() {
+      var q = input.value.trim().toLowerCase();
+      var shown = 0;
+
+      rows.forEach(function (r) {
+        var hit = !q || r.dataset.hay.indexOf(q) !== -1;
+        r.hidden = !hit;
+        if (hit) shown++;
+      });
+
+      // Hide a whole subsection (its h3 and container) when nothing in it matched.
+      document.querySelectorAll('.rows').forEach(function (group) {
+        var any = Array.prototype.some.call(group.children, function (c) { return !c.hidden; });
+        group.hidden = !any;
+        var prev = group.previousElementSibling;
+        while (prev && prev.tagName !== 'H3' && prev.tagName !== 'H2') prev = prev.previousElementSibling;
+        if (prev && prev.tagName === 'H3') prev.hidden = !any;
+      });
+
+      document.querySelectorAll('section').forEach(function (sec) {
+        var any = sec.querySelectorAll('.row:not([hidden])').length > 0;
+        sec.hidden = q ? !any : false;
+      });
+
+      document.querySelectorAll('.callout, .flow').forEach(function (el) {
+        el.hidden = !!q;
+      });
+
+      count.textContent = q ? shown + ' / ' + total : total + ' bindings';
+      empty.classList.toggle('on', q && shown === 0);
+    }
+
+    input.addEventListener('input', apply);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { input.value = ''; apply(); }
+    });
+    apply();
+  })();
+</script>

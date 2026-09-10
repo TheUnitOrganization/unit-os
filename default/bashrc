@@ -1,0 +1,51 @@
+#
+# ~/.bashrc
+#
+
+# If not running interactively, don't do anything
+[[ $- != *i* ]] && return
+
+# --- PATH ---------------------------------------------------------------
+export PATH="$HOME/.local/bin:$PATH"
+
+# --- Defaults -----------------------------------------------------------
+export EDITOR=nvim
+export VISUAL=nvim
+export MANPAGER='nvim +Man!'
+
+# --- Aliases ------------------------------------------------------------
+alias ls='ls --color=auto'
+alias ll='ls -lah --color=auto'
+alias grep='grep --color=auto'
+alias vim='nvim'
+alias vi='nvim'
+alias lg='lazygit'
+alias cfg='cd ~/.config'
+
+command -v bat >/dev/null && alias cat='bat --paging=never'
+
+# --- Prompt / tools -----------------------------------------------------
+# Each guarded: a missing package must not break the shell.
+if command -v starship >/dev/null; then
+    eval "$(starship init bash)"
+else
+    PS1='[\u@\h \W]\$ '
+fi
+
+command -v zoxide >/dev/null && eval "$(zoxide init bash)"
+
+# fzf: Ctrl-R history search, Ctrl-T file search, Alt-C cd
+[ -f /usr/share/fzf/key-bindings.bash ] && source /usr/share/fzf/key-bindings.bash
+[ -f /usr/share/fzf/completion.bash ]   && source /usr/share/fzf/completion.bash
+
+if command -v fd >/dev/null; then
+    export FZF_DEFAULT_COMMAND='fd --type f --hidden --exclude .git'
+    export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+fi
+export FZF_DEFAULT_OPTS='--height 40% --layout=reverse --border=rounded'
+
+# --- dotfiles (bare repo at ~/.dotfiles, work tree = $HOME) ---------------
+# dots status / dots add <file> / dots commit -m "..." / dots push
+alias dots='git --git-dir=$HOME/.dotfiles --work-tree=$HOME'
+# one-shot: stage every tracked change and commit with a timestamp
+alias dots-save='dots add -u && dots commit -m "save $(date +%F\ %H:%M)" && dots push 2>/dev/null; dots log -1 --format="saved %cr"'

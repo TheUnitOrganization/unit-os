@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=WhatsApp
+GenericName=Messenger
+Comment=WhatsApp Web in a chromeless Brave window
+Exec=whatsapp
+Icon=brave-browser
+Terminal=false
+StartupWMClass=whatsapp
+Keywords=whatsapp;wa;web;chat;message;messenger;
+Categories=Network;InstantMessaging;

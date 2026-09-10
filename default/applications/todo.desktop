@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=TODO
+Comment=The one to-do list
+Exec=kitty --title TODO -e nvim $HOME/Documents/TODO.md
+Icon=accessories-text-editor
+Terminal=false
+Categories=Utility;

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#
+# setup-autologin -- drop the TTY password prompt. tty1 logs in on its own,
+# ~/.bash_profile starts Hyprland as it already does, and hyprlock comes up
+# as the first thing on screen (see ~/.config/hypr/autostart.lua).
+#
+#   sudo ~/.local/bin/setup-autologin           apply
+#   sudo ~/.local/bin/setup-autologin --revert   back to the login: prompt
+#
+# The trade: this does not remove a password, it moves it. The disk is not
+# encrypted (plain btrfs, empty /etc/crypttab), so the TTY password never
+# protected anything at rest anyway -- it only gated the session. hyprlock
+# gates the same session, with the same PAM stack, and looks like the rest
+# of the machine.
+#
+# What it does cost: tty2-6 still ask for a password, but anyone with the
+# keyboard can Ctrl+Alt+F2 into... a login prompt, so that is unchanged.
+# The real exposure is the second or so between Hyprland starting and
+# hyprlock's surface appearing, and a hyprlock that crashes -- lock-boot
+# retries three times for exactly that reason.
+#
+set -euo pipefail
+
+USER_NAME=januario
+DIR=/etc/systemd/system/getty@tty1.service.d
+
+[[ $EUID -eq 0 ]] || { echo "run me with sudo -- full path, sudo's secure_path drops ~/.local/bin"; exit 1; }
+
+if [[ "${1:-}" == "--revert" ]]; then
+    rm -f "$DIR/autologin.conf"
+    rmdir --ignore-fail-on-non-empty "$DIR" 2>/dev/null || true
+    systemctl daemon-reload
+    echo ":: reverted -- tty1 asks for a password again from the next boot."
+    exit 0
+fi
+
+install -d "$DIR"
+cat > "$DIR/autologin.conf" <<EOF
+# Written by setup-autologin.
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/agetty --autologin $USER_NAME --noclear %I \$TERM
+EOF
+systemctl daemon-reload
+
+echo ":: tty1 autologin for $USER_NAME"
+sed 's/^/   /' "$DIR/autologin.conf"
+cat <<'EOF'
+
+done. Reboot to see it.
+
+  escape hatch   Ctrl+Alt+F2 for a plain TTY if Hyprland will not start.
+                 With autologin a broken session makes tty1 loop faster,
+                 so reach for F2 sooner.
+  undo           sudo ~/.local/bin/setup-autologin --revert
+EOF

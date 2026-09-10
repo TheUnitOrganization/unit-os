@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Commit any changed *tracked* config to ~/.dotfiles. Silent when clean.
+#
+# Two things call this and nothing else has to:
+#   - the Claude Code Stop hook, so a session that edited configs saves them
+#     the moment it stops talking;
+#   - a systemd user timer every 15 minutes, which catches edits you made by
+#     hand in nvim.
+# Both are plain shell. No model runs, no polling loop, no tokens.
+#
+# `add -u` on purpose: it stages modifications and deletions of files already
+# tracked, and never picks up something new. A new config file is still a
+# deliberate `dots add <path>`, so nothing gets hoovered into the repo by
+# accident.
+set -uo pipefail
+
+DOTS=(git --git-dir="$HOME/.dotfiles" --work-tree="$HOME")
+[ -d "$HOME/.dotfiles" ] || exit 0
+
+changed=$("${DOTS[@]}" status --porcelain --untracked-files=no 2>/dev/null | wc -l)
+[ "$changed" -gt 0 ] || exit 0
+
+"${DOTS[@]}" add -u                                          || exit 0
+"${DOTS[@]}" commit -q -m "autosave $(date '+%F %H:%M')"      || exit 0
+# No remote yet (the unit-linux repo does not exist), so a failed push is
+# expected and must not be noise.
+"${DOTS[@]}" push -q 2>/dev/null
+
+# Repaint the save pill straight away instead of waiting for its interval.
+pkill -RTMIN+9 waybar 2>/dev/null
+
+printf '%s\n' "$changed"

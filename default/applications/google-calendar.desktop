@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Google Calendar
+Comment=Calendar in a chromeless Brave window
+Exec=brave --app=https://calendar.google.com
+Icon=x-office-calendar
+Terminal=false
+Categories=Office;Calendar;

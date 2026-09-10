@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# wall-next            jump to a random wallpaper from the current theme's set
+# wall-next /path.png  set a specific image
+# Reads the set directory from ~/.config/hypr/hyprpaper.conf (path = ...).
+set -euo pipefail
+conf=~/.config/hypr/hyprpaper.conf
+mon=$(hyprctl hyprpaper listactive | head -1 | cut -d: -f1)
+if [[ $# -ge 1 ]]; then pick=$1; else
+  dir=$(sed -n 's/^ *path *= *//p' "$conf" | head -1)
+  cur=$(hyprctl hyprpaper listactive | head -1 | sed 's/^[^:]*: //')
+  pick=$(find "$dir" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) ! -path "$cur" | shuf -n1)
+fi
+hyprctl hyprpaper wallpaper "$mon,$pick" >/dev/null && echo "$pick"

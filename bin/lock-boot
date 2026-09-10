@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#
+# lock-boot -- hyprlock as the login screen.
+#
+# tty1 autologins (see setup-autologin), so this is the only thing standing
+# between power-on and the desktop. Plain `hyprlock` would be enough on a
+# good day; the retry is for the bad one. If hyprlock dies -- a GPU hiccup,
+# a bad config after an edit -- an un-retried lock means the machine boots
+# straight to an unlocked session and nobody notices.
+#
+#   --grace 0          never auto-unlock, always ask. This is a login, not
+#                      an idle lock, so the grace period would be a hole.
+#   --immediate-render draw the background before the wallpaper is decoded,
+#                      so there is no flash of desktop underneath.
+#   --no-fade-in       nothing to fade in from at boot.
+#
+# hypridle calls plain `hyprlock` for idle locking; this script is only the
+# boot path.
+#
+set -uo pipefail
+
+for attempt in 1 2 3; do
+    hyprlock --grace 0 --immediate-render --no-fade-in
+    rc=$?
+    [[ $rc -eq 0 ]] && exit 0        # unlocked normally
+    logger -t lock-boot "hyprlock exited $rc on attempt $attempt/3"
+    sleep 1
+done
+
+logger -t lock-boot "hyprlock failed three times -- session is UNLOCKED"
+notify-send -u critical "Lock screen failed" \
+    "hyprlock would not start, so this session is unlocked. Check: journalctl -t lock-boot"
+exit 1

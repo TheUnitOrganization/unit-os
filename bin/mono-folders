@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Build ~/.local/share/icons/Papirus-Mono: Papirus-Dark with white folders.
+#
+# Kept as the name the old mono theme used (now `theme terminal`, Papirus-Terminal). The work now lives in
+# `papirus-variant`, which does the same for any base theme and colour.
+#
+#     mono-folders            white folders (the default)
+#     mono-folders bluegrey   or any other Papirus colour
+exec "$(dirname "$0")/papirus-variant" Papirus-Mono Papirus-Dark "${1:-white}"

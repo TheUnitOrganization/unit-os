@@ -1,0 +1,90 @@
+/* mecha-no-onna -- narrow vertical launcher, Omarchy-menu shaped.
+   Monochrome: parchment on near-black, no hue anywhere. */
+
+* {
+    base:     #1c1b19;
+    mantle:   #141311;
+    surface0: #2a2823;
+    surface1: #45413a;
+    text:     #f0e4c5;
+    subtext:  #a89984;
+
+    background-color: transparent;
+    text-color:       @text;
+}
+
+window {
+    transparency:     "real";
+    background-color: @base;
+    border:           1px;
+    border-color:     rgba(240, 228, 197, 0.28);
+    border-radius:    16px;
+    width:            420px;
+    padding:          14px;
+    location:         center;
+    anchor:           center;
+}
+
+mainbox {
+    spacing:  10px;
+    children: [ inputbar, listview ];
+}
+
+/* Search field: its own outlined box at the top, like the reference */
+inputbar {
+    background-color: @mantle;
+    border:           1px;
+    border-color:     rgba(240, 228, 197, 0.22);
+    border-radius:    10px;
+    padding:          10px 12px;
+    spacing:          8px;
+    children:         [ entry ];
+}
+
+entry {
+    placeholder:       "Go...";
+    placeholder-color: @subtext;
+    cursor:            text;
+}
+
+listview {
+    lines:        10;
+    columns:      1;
+    scrollbar:    false;
+    spacing:      2px;
+    fixed-height: false;
+    dynamic:      true;
+}
+
+element {
+    padding:       10px 12px;
+    border-radius: 10px;
+    spacing:       12px;
+    cursor:        pointer;
+}
+
+element normal.normal   { text-color: @text; }
+element alternate.normal { text-color: @text; }
+
+/* The one filled row = where you are. No hue, just contrast. */
+element selected.normal {
+    background-color: @surface1;
+    text-color:       @text;
+    border:           0px;
+}
+
+element-icon {
+    size:           22px;
+    vertical-align: 0.5;
+}
+
+element-text {
+    vertical-align: 0.5;
+    highlight:      bold;
+}
+
+message {
+    background-color: @surface0;
+    border-radius:    10px;
+    padding:          10px;
+}

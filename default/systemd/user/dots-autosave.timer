@@ -1,0 +1,13 @@
+[Unit]
+Description=Save dotfiles every hour
+
+[Timer]
+# 2 min after login, then hourly. Persistent= replays a run that was missed
+# while the laptop was asleep, so closing the lid never loses a day of edits.
+OnStartupSec=2min
+OnUnitActiveSec=1h
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

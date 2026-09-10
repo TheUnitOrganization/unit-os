@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Keys Cheatsheet
+Comment=Hyprland, terminal and Neovim bindings
+Exec=brave file://$HOME/Documents/cheatsheets.html
+Icon=preferences-desktop-keyboard-shortcuts
+Terminal=false
+Categories=Utility;

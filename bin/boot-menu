@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#
+# boot-menu -- make the systemd-boot menu plain and readable.
+#
+# Two complaints it fixes: the firmware hands systemd-boot a high-res GOP
+# console, so on a 2880x1620 panel the menu is drawn in a tiny bad font; and
+# the Arch entry is titled after the install timestamp
+# (2026-09-08_23-16-28_linux) rather than a name.
+#
+#   sudo boot-menu              apply, console-mode 0 (80x25, biggest font)
+#   sudo boot-menu --mode 1     try another text mode (0,1,2,auto,max,keep)
+#   sudo boot-menu --revert     undo
+#
+# console-mode is trial and error -- the modes a board offers vary. 0 is
+# always 80x25 and always the chunkiest. Reboot, look, run it again with
+# another --mode if you want a different size. Nothing here touches the
+# linux/initrd/options lines, so a bad value costs a reboot, never a boot.
+#
+# Note: systemd-boot centres its entry list and that is not configurable.
+# "Windows Boot Manager" and "Reboot Into Firmware Interface" are generated
+# by systemd-boot at scan time, not files, so their titles are fixed too.
+#
+set -euo pipefail
+
+MODE=0
+TIMEOUT=3
+ESP=/boot
+ENTRIES="$ESP/loader/entries"
+CONF="$ESP/loader/loader.conf"
+
+[[ $EUID -eq 0 ]] || { echo "run me with sudo"; exit 1; }
+[[ -d $ENTRIES ]] || { echo "no $ENTRIES -- is the ESP mounted at $ESP?"; exit 1; }
+
+backup() { [[ -e "$1" && ! -e "$1.pre-boot-menu" ]] && cp -a "$1" "$1.pre-boot-menu"; return 0; }
+
+show() {
+    echo
+    echo ":: loader.conf"; sed 's/^/   /' "$CONF"
+    echo ":: titles"
+    for e in "$ENTRIES"/*.conf; do
+        printf '   %-40s %s\n' "$(basename "$e")" "$(grep -m1 '^title ' "$e" 2>/dev/null || echo '(none)')"
+    done
+    echo
+    echo "Reboot and hold SPACE if the menu does not appear on its own."
+}
+
+if [[ "${1:-}" == "--revert" ]]; then
+    for f in "$CONF" "$ENTRIES"/*.conf; do
+        [[ -e "$f.pre-boot-menu" ]] && { mv "$f.pre-boot-menu" "$f"; echo "   restored $f"; }
+    done
+    show; exit 0
+fi
+
+[[ "${1:-}" == "--mode" ]] && { MODE=${2:?--mode needs a value}; }
+
+# ---- titles ---------------------------------------------------------------
+for e in "$ENTRIES"/*.conf; do
+    backup "$e"
+    case "$(basename "$e")" in
+        *fallback*) t="Arch Linux (fallback)" ;;
+        *)          t="Arch Linux" ;;
+    esac
+    if grep -q '^title ' "$e"; then
+        sed -i -E "s|^title .*|title $t|" "$e"
+    else
+        sed -i "1i title $t" "$e"
+    fi
+done
+
+# ---- loader.conf ----------------------------------------------------------
+backup "$CONF"
+default=$(basename "$(ls -1 "$ENTRIES"/*.conf | grep -v fallback | head -1)")
+{
+    echo "# written by boot-menu"
+    echo "timeout $TIMEOUT"
+    echo "console-mode $MODE"
+    echo "editor no"
+    echo "default $default"
+} > "$CONF"
+
+show

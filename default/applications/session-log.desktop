@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Session Log
+Comment=Per-session notes: built, gotchas, still open
+Exec=brave file://$HOME/Documents/sessions/index.html
+Icon=text-html
+Terminal=false
+Categories=Utility;Documentation;

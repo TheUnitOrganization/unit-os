@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=System Guide
+Comment=What this desktop is, where things live, how to rebuild it
+Exec=brave file://$HOME/Documents/system-guide.html
+Icon=help-contents
+Terminal=false
+Categories=Utility;Documentation;

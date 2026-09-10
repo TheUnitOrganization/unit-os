@@ -1,0 +1,34 @@
+general.import = ["~/.config/alacritty/colors.toml"]
+
+# ~/.config/alacritty/alacritty.toml -- mecha-no-onna
+
+[window]
+# This is the padding that was missing: without it text runs straight into
+# the window edge, which is the "overflow" look in Claude Code.
+padding = { x = 14, y = 14 }
+dynamic_padding = true
+opacity = 0.75
+decorations = "none"
+
+[font]
+size = 11.0
+normal = { family = "JetBrainsMono Nerd Font", style = "Regular" }
+bold   = { family = "JetBrainsMono Nerd Font", style = "Bold" }
+italic = { family = "JetBrainsMono Nerd Font", style = "Italic" }
+
+[scrolling]
+history = 10000
+
+# Shift+Enter / Ctrl+Enter -> newline instead of submit.
+# The value is ESC + CR, which is what Alt+Enter sends; Claude Code reads
+# it as "insert a newline" rather than "send the message".
+
+[[keyboard.bindings]]
+key = "Return"
+mods = "Shift"
+chars = "\u001B\r"
+
+[[keyboard.bindings]]
+key = "Return"
+mods = "Control"
+chars = "\u001B\r"

@@ -1,0 +1,958 @@
+#!/usr/bin/env python3
+"""Desktop theme switcher.
+
+    theme                    show the current theme and the available ones
+    theme terminal           personal-os: true black, off-white, square
+    theme studio             artist-os: warm greys under parchment, soft
+
+Both themes are dark; there is no light side. `terminal` holds the far end
+of the range and `studio`, warm and several steps up, covers what a light
+theme would have. `mono`, `mecha` and `brown` still resolve.
+
+One palette drives waybar, kitty, rofi, dunst, Hyprland borders, hyprlock,
+GTK (Thunar), starship and Neovim. Add a theme by adding one entry to
+FAMILIES below -- nothing else needs editing.
+"""
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+CFG = HOME / ".config"
+STATE = CFG / "themes" / "current"
+# Pins the wallpaper across every theme: one absolute path, or one
+# `dark <path>` / `light <path>` line per side (see pinned()).
+PIN = CFG / "themes" / "wallpaper"
+
+# --------------------------------------------------------------------------
+# Palettes
+# --------------------------------------------------------------------------
+# ansi = the 16 terminal colours, in order 0-7 then 8-15.
+# Per-category folder hues, shared by every palette. Plain folders (and Home
+# and Desktop) keep the palette's own colour from `icons_src`; these few give
+# the sidebar something to read at a glance without turning it into a toybox.
+# Papirus files Downloads under both spellings, so both are listed. Only XDG
+# user dirs appear here: those are the only folders GTK ever asks for by
+# category. Thunar 4.20 ignores metadata::custom-icon(-name), so there is no
+# way to hand-assign a hue to an ordinary folder like ~/Projects.
+FOLDER_HUES = {
+    "documents":  "blue",
+    "download":   "green",
+    "downloads":  "green",
+    "music":      "violet",
+    # Papirus files Videos as `folder-video` (singular) and Pictures as
+    # `folder-pictures`; listing only "videos" left folder-video.svg on the
+    # palette colour, which is why Videos was the one folder with no hue.
+    "video":      "red",
+    "videos":     "red",
+    # Not yellow: plain folders already take yellow in the dark palettes, so
+    # a yellow Pictures was indistinguishable from an ordinary folder.
+    "pictures":   "cyan",
+}
+
+# Two themes, both dark. `terminal` is personal-os, `studio` is artist-os.
+# A theme is one flat palette plus the few things that are not colours: the
+# wallpaper set, the Neovim scheme and the corner radius.
+FAMILIES = {
+    "terminal": {
+        "label": "terminal (personal-os)",
+        "wallpapers": "unit-os-theme",
+        # Corner radius, in px, for everything that has a corner: Hyprland
+        # windows, waybar pills, rofi, dunst, GTK menus/buttons, hyprlock.
+        # personal-os is square; artist-os is soft. This is the one
+        # visible difference between the two themes' shapes.
+        "radius": 0,
+        # Neovim ships `quiet`: a near-monochrome built-in.
+        "nvim": "quiet",
+        # True black (owner call 2026-09-10). `studio` reads as the lighter
+        # of the two, so `terminal` takes the far end rather than meeting it
+        # halfway. `mantle` has nowhere left to go below base, so the bar and
+        # sidebars sit flush on the ground and every bit of separation comes
+        # from the surfaces stacked above it.
+        "base": "#000000", "mantle": "#000000",
+        "surface0": "#0d0d0d", "surface1": "#1a1a1a",
+        "text": "#e0e0e0", "muted": "#8f8f8f",
+        # `accent` stays off-white so borders, waybar and the prompt char
+        # remain monochrome. Only the two things worth interrupting for
+        # take a hue: failure (red) and git/warnings (amber -- the ANIMA
+        # pilot light).
+        "accent": "#e0e0e0", "accent2": "#f0a93b",
+        "warn": "#f0a93b", "crit": "#ff4444",
+        # Selection has to read as a selection at a glance: #2e2e2e sat
+        # below color8 on true black and all but vanished. This is the
+        # brightest grey that still keeps #e0e0e0 text comfortably legible.
+        "selection": "#4d4d4d",
+        # Windows only: Thunar and friends sit a few steps above the black
+        # the bar and terminals use, so a window reads as an object against
+        # the wallpaper instead of a hole in it.
+        "gtk_base": "#0e0e0e", "gtk_mantle": "#080808",
+        "gtk_surface0": "#171717", "gtk_surface1": "#242424",
+        "gtk_theme": "Adwaita-dark", "prefer_dark": 1,
+        "color_scheme": "prefer-dark",
+        "icons": "Papirus-Terminal", "icons_src": ("Papirus-Dark", "yellow"),
+        "opacity": "0.80",
+        # Greyscale except slots 1/9 (red) and 3/11 (yellow): errors and
+        # warnings get a real hue, everything else separates by lightness.
+        "ansi": [
+            "#000000", "#ff4444", "#7d7d7d", "#f0a93b",
+            "#6b6b6b", "#949494", "#c4c4c4", "#e0e0e0",
+            "#3a3a3a", "#ff6b6b", "#a8a8a8", "#f6c26b",
+            "#909090", "#bcbcbc", "#e2e2e2", "#ffffff",
+        ],
+    },
+    "studio": {
+        "label": "studio (artist-os)",
+        "wallpapers": "unit-os-theme",
+        "radius": 12,
+        "nvim": "gruvbox-material",
+        # Warm greys under parchment text. The warmth in the greys is what
+        # separates this from `terminal` -- and at true black, `terminal` is
+        # no longer anywhere near it.
+        "base": "#1b1a18", "mantle": "#141311",
+        "surface0": "#242220", "surface1": "#302d29",
+        "text": "#f0ece7", "muted": "#a09c96",
+        "accent": "#d4bd99", "accent2": "#e7c07c",
+        "warn": "#e8c88a", "crit": "#ef4444",
+        "selection": "#5a5248",
+        "gtk_theme": "Adwaita-dark", "prefer_dark": 1,
+        "color_scheme": "prefer-dark",
+        "icons": "Papirus-Brown", "icons_src": ("Papirus-Dark", "yellow"),
+        "opacity": "0.75",
+        "ansi": [
+            "#1b1a18", "#c5564a", "#a89984", "#ebdbb2",
+            "#908d88", "#afa499", "#d4bd99", "#f0ece7",
+            "#6b655c", "#ef4444", "#c2a571", "#e8c88a",
+            "#aaa090", "#cbae8e", "#e7c07c", "#fff8e8",
+        ],
+    },
+}
+
+# Lock screen background: ANIMA at rest (the 4-wheel-leg render). A pinned
+# wallpaper (~/.config/themes/wallpaper) wins here too, so the lock screen
+# always shows the same image as the desktop.
+LOCK_IMAGE = HOME / "Pictures/unit-os-theme/anima-wheel.png"
+
+# Names these themes have had before.
+ALIASES = {"mono": "terminal", "mecha": "studio", "brown": "studio"}
+
+
+def palette(family: str) -> dict:
+    return dict(FAMILIES[family])
+
+
+def radii(p) -> dict:
+    """The family's corner radius, stepped down for nested things: a pill
+    or a notification card is `lg`, a menu or a row inside it `sm`, a
+    button or an entry `xs`. All 0 when the family is square."""
+    r = int(p.get("radius", 0))
+    return {"r": r, "win": r + 4 if r else 0, "lg": r + 2 if r else 0,
+            "sm": max(r - 2, 0), "xs": max(r - 4, 0)}
+
+
+def pinned():
+    """The pinned wallpaper, or None.
+
+    ~/.config/themes/wallpaper holds one absolute path, used by every
+    theme. A missing file means no pin and the theme's folder rotates."""
+    if not PIN.exists():
+        return None
+    for line in PIN.read_text().splitlines():
+        words = line.strip().split(None, 1)
+        if not words or words[0].startswith("#"):
+            continue
+        # A leftover `dark <path>` / `light <path>` line from the days of
+        # two sides still resolves: the path is taken, the side ignored.
+        path = Path(words[-1].strip())
+        if path.is_file():
+            return path
+    return None
+
+
+def read_state():
+    """The theme name; an old name or a trailing `dark`/`light` is ignored."""
+    words = STATE.read_text().split() if STATE.exists() else []
+    family = ALIASES.get(words[0], words[0]) if words else "terminal"
+    return family if family in FAMILIES else "terminal"
+
+
+def write(path: Path, text: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def hypr_rgba(hex_color: str, aa: str) -> str:
+    return f"rgba({hex_color.lstrip('#')}{aa})"
+
+
+def mix(a: str, b: str, t: float = 0.5) -> str:
+    """Blend two hex colours, `t` of the way from `a` to `b`."""
+    ah, bh = a.lstrip("#"), b.lstrip("#")
+    return "#" + "".join(
+        f"{round(int(ah[i:i + 2], 16) * (1 - t) + int(bh[i:i + 2], 16) * t):02x}"
+        for i in (0, 2, 4)
+    )
+
+
+# --------------------------------------------------------------------------
+# Renderers
+# --------------------------------------------------------------------------
+def render_waybar(p):
+    write(CFG / "waybar" / "colors.css", f"""/* generated by `theme` -- do not edit by hand */
+@define-color base     {p['base']};
+@define-color mantle   {p['mantle']};
+@define-color surface0 {p['surface0']};
+@define-color surface1 {p['surface1']};
+@define-color text     {p['text']};
+@define-color subtext  {p['muted']};
+@define-color mauve    {p['accent']};
+@define-color blue     {p['muted']};
+@define-color green    {p['accent2']};
+@define-color yellow   {p['warn']};
+@define-color peach    {p['accent2']};
+@define-color red      {p['crit']};
+""")
+    # Lengths cannot be @define-color'd, so the radii get their own file.
+    # style.css imports it and sets no border-radius on these selectors.
+    R = radii(p)
+    write(CFG / "waybar" / "shape.css", f"""/* generated by `theme` -- do not edit by hand */
+#workspaces, #window, #work, #tray, #link, #system {{ border-radius: {R['lg']}px; }}
+#workspaces button {{ border-radius: {R['sm']}px; }}
+tooltip, tooltip.background {{ border-radius: {R['lg']}px; }}
+""")
+
+
+def render_kitty(p):
+    a = p["ansi"]
+    lines = [f"# generated by `theme` -- do not edit by hand",
+             f"foreground            {p['text']}",
+             f"background            {p['base']}",
+             f"selection_foreground  {p['text']}",
+             f"selection_background  {p['selection']}",
+             f"cursor                {p['text']}",
+             f"cursor_text_color     {p['base']}",
+             f"url_color             {p['accent']}",
+             f"active_border_color   {p['accent']}",
+             f"inactive_border_color {p['muted']}",
+             f"active_tab_foreground   {p['base']}",
+             f"active_tab_background   {p['accent']}",
+             f"inactive_tab_foreground {p['muted']}",
+             f"inactive_tab_background {p['mantle']}",
+             f"background_opacity      {p['opacity']}"]
+    # Tabs: powerline pills for a rounded family, flat blocks for a square
+    # one. kitty.conf sets the rounded default; this include overrides it.
+    if radii(p)["r"]:
+        lines += ["tab_bar_style           powerline",
+                  "tab_powerline_style     round"]
+    else:
+        lines += ["tab_bar_style           separator",
+                  'tab_separator           "  "']
+    for i in range(8):
+        lines.append(f"color{i} {a[i]}")
+        lines.append(f"color{i + 8} {a[i + 8]}")
+    write(CFG / "kitty" / "colors.conf", "\n".join(lines) + "\n")
+
+
+def render_alacritty(p):
+    a = p["ansi"]
+    write(CFG / "alacritty" / "colors.toml", f"""# generated by `theme` -- do not edit by hand
+[colors.primary]
+background = "{p['base']}"
+foreground = "{p['text']}"
+
+[colors.cursor]
+text   = "{p['base']}"
+cursor = "{p['text']}"
+
+[colors.selection]
+text       = "{p['text']}"
+background = "{p['selection']}"
+
+[colors.normal]
+black   = "{a[0]}"
+red     = "{a[1]}"
+green   = "{a[2]}"
+yellow  = "{a[3]}"
+blue    = "{a[4]}"
+magenta = "{a[5]}"
+cyan    = "{a[6]}"
+white   = "{a[7]}"
+
+[colors.bright]
+black   = "{a[8]}"
+red     = "{a[9]}"
+green   = "{a[10]}"
+yellow  = "{a[11]}"
+blue    = "{a[12]}"
+magenta = "{a[13]}"
+cyan    = "{a[14]}"
+white   = "{a[15]}"
+""")
+
+
+def render_rofi(p):
+    R = radii(p)
+    write(CFG / "rofi" / "theme.rasi", f"""/* generated by `theme` -- do not edit by hand */
+* {{
+    base:     {p['base']};
+    mantle:   {p['mantle']};
+    surface0: {p['surface0']};
+    surface1: {p['surface1']};
+    text:     {p['text']};
+    subtext:  {p['muted']};
+
+    background-color: transparent;
+    text-color:       @text;
+}}
+
+window {{
+    transparency:     "real";
+    background-color: @base;
+    border:           1px;
+    border-color:     {rgba(p['text'], 0.28)};
+    border-radius:    {R['win']}px;
+    width:            420px;
+    padding:          14px;
+    location:         center;
+    anchor:           center;
+}}
+
+mainbox {{ spacing: 10px; children: [ inputbar, listview ]; }}
+
+inputbar {{
+    background-color: @mantle;
+    border:           1px;
+    border-color:     {rgba(p['text'], 0.22)};
+    border-radius:    {R['sm']}px;
+    padding:          10px 12px;
+    spacing:          8px;
+    children:         [ entry ];
+}}
+
+entry {{ placeholder: "Go..."; placeholder-color: @subtext; cursor: text; }}
+
+listview {{
+    lines: 10; columns: 1; scrollbar: false;
+    spacing: 2px; fixed-height: true; dynamic: false;
+}}
+
+element {{ padding: 10px 12px; border-radius: {R['sm']}px; spacing: 12px; cursor: pointer; }}
+element normal.normal    {{ text-color: @text; }}
+element alternate.normal {{ text-color: @text; }}
+
+element selected.normal {{
+    background-color: @surface1;
+    text-color:       @text;
+    border:           0px;
+}}
+
+element-icon {{ size: 22px; vertical-align: 0.5; }}
+element-text {{ vertical-align: 0.5; highlight: bold; }}
+message {{ background-color: @surface0; border-radius: {R['sm']}px; padding: 10px; }}
+""")
+
+
+def render_dunst(p):
+    R = radii(p)
+    write(CFG / "dunst" / "dunstrc", f"""# generated by `theme` -- do not edit by hand
+[global]
+    monitor = 0
+    follow = mouse
+    # Wide enough that the AI usage table (bars + "resets in 1h 56m") fits
+    # on one line each. Notifications still shrink to their content.
+    width = (250, 680)
+    height = (0, 300)
+    origin = top-right
+    # dunst is a layer-shell surface, so it is already placed below the
+    # bar's exclusive zone (waybar: 10px margin + 48px tall = 58). The
+    # offset is on top of that, and 16 on both axes is Hyprland's gaps_out
+    # (~/.config/hypr/looks.lua): the notification's top and right edges
+    # line up exactly with the window below it. (62 here put it 120px down.)
+    offset = (16, 16)
+    notification_limit = 5
+
+    progress_bar = true
+    progress_bar_height = 8
+    progress_bar_frame_width = 1
+
+    # Same glass as the bar: 55% opaque over a blurred layer (the blur is a
+    # layer rule on "notifications" in ~/.config/hypr/rules.lua).
+    transparency = 45
+    separator_height = 2
+    padding = 16
+    horizontal_padding = 18
+    frame_width = 1
+    # Square for `terminal`, soft for `studio`. The layer rule in
+    # ~/.config/hypr/rules.lua sets ignore_alpha, so the rounded corners
+    # are really transparent rather than a square of blurred backdrop.
+    corner_radius = {R['lg']}
+    progress_bar_corner_radius = {R['xs']}
+    gap_size = 8
+
+    font = JetBrainsMono Nerd Font 10
+    markup = full
+    format = "<b>%s</b>\\n%b"
+    alignment = left
+    vertical_alignment = center
+    ellipsize = middle
+    stack_duplicates = true
+    show_indicators = no
+
+    enable_recursive_icon_lookup = true
+    icon_theme = "{p['icons']}"
+    icon_position = left
+    min_icon_size = 32
+    max_icon_size = 64
+
+    sticky_history = yes
+    history_length = 20
+    dmenu = /usr/bin/rofi -dmenu -p dunst
+    browser = /usr/bin/brave
+    mouse_left_click = do_action, close_current
+    mouse_middle_click = close_all
+    mouse_right_click = close_current
+
+[urgency_low]
+    background = "{p['base']}"
+    foreground = "{p['muted']}"
+    frame_color = "{p['surface1']}"
+    timeout = 5
+
+[urgency_normal]
+    background = "{p['base']}"
+    foreground = "{p['text']}"
+    # The focused-window border in ~/.config/hypr/colors.lua is a 45 degree
+    # sweep from `accent` into `surface1`, which is why a selected terminal
+    # reads as edged rather than outlined. dunst takes one flat colour, so
+    # this is that gradient flattened to its midpoint: the same two ends,
+    # no hard off-white ring. Push the third argument toward 0 for more
+    # presence, toward 1 to fade the frame into the low-urgency grey.
+    frame_color = "{mix(p['accent'], p['surface1'], 0.5)}"
+    timeout = 8
+
+[urgency_critical]
+    background = "{p['base']}"
+    foreground = "{p['crit']}"
+    frame_color = "{p['crit']}"
+    timeout = 0
+
+# The AI usage popup is a table, not a message -- it does not need a title
+# repeating what the pill already says. Body only.
+[ai-usage]
+    appname = "AI usage"
+    format = "%b"
+""")
+
+
+def render_hypr(p):
+    write(CFG / "hypr" / "colors.lua", f"""-- generated by `theme` -- do not edit by hand
+return {{
+    active_border   = {{ colors = {{ "{hypr_rgba(p['accent'], 'ee')}",
+                                    "{hypr_rgba(p['surface1'], 'ee')}" }}, angle = 45 }},
+    inactive_border = "{hypr_rgba(p['surface1'], 'aa')}",
+    shadow_color    = "{hypr_rgba(p['mantle'], '99')}",
+    rounding        = {radii(p)['r']},
+    rounding_power  = 3,
+}}
+""")
+
+
+def render_wallpaper(p):
+    """hyprpaper 0.8: a directory `path` + `timeout` gives rotation; a file
+    `path` with no `timeout` gives one fixed wallpaper.
+    Absolute path only; a bad path fails silently ("no target").
+
+    A pin wins over the theme's set: see pinned() for the file format.
+    Remove ~/.config/themes/wallpaper to go back to rotating the theme's
+    own folder."""
+    header = """# generated by `theme` -- do not edit by hand
+# hyprpaper 0.8 format (no preload / wallpaper= lines).
+splash = false
+ipc = on
+"""
+    pin = pinned()
+    if pin:
+        body = f"""
+# Pinned by ~/.config/themes/wallpaper. No timeout = no rotation.
+wallpaper {{
+    monitor   =
+    path      = {pin}
+    fit_mode  = cover
+}}
+"""
+    else:
+        d = HOME / "Pictures" / p["wallpapers"]
+        body = f"""
+wallpaper {{
+    monitor   =
+    path      = {d}
+    fit_mode  = cover
+    order     = random
+    # 5 minutes. Long enough not to catch your eye mid-sentence, short
+    # enough that the set actually feels like a rotation.
+    timeout   = 300
+}}
+"""
+    write(CFG / "hypr" / "hyprpaper.conf", header + body)
+
+
+def render_starship(p):
+    write(CFG / "starship.toml", f"""# generated by `theme` -- do not edit by hand
+add_newline = true
+command_timeout = 800
+
+format = """ + '"""' + f"""$directory$git_branch$git_status$cmd_duration
+$character""" + '"""' + f"""
+
+[character]
+success_symbol = '[\\$](bold {p['accent']})'
+error_symbol   = '[\\$](bold {p['crit']})'
+
+[directory]
+style = "bold {p['text']}"
+truncation_length = 3
+truncate_to_repo = true
+
+[git_branch]
+symbol = " "
+style = "bold {p['accent2']}"
+
+[git_status]
+style = "bold {p['muted']}"
+
+[cmd_duration]
+min_time = 2000
+format = "took [$duration]($style) "
+style = "{p['muted']}"
+""")
+
+
+def render_gtk(p):
+    # GTK-only surface overrides. App windows can sit a few steps lighter than
+    # the desktop without dragging waybar, kitty, rofi or the Hyprland borders
+    # up with them -- set gtk_base / gtk_mantle / gtk_surface0 / gtk_surface1
+    # in a palette. Unset keys fall back to the palette's own values, so every
+    # existing theme renders exactly as it did before.
+    g = {k: p.get(f"gtk_{k}", p[k])
+         for k in ("base", "mantle", "surface0", "surface1")}
+    R = radii(p)
+    css = f"""/* generated by `theme` -- do not edit by hand */
+@define-color base       {g['base']};
+@define-color mantle     {g['mantle']};
+@define-color surface0   {g['surface0']};
+@define-color surface1   {g['surface1']};
+@define-color parchment  {p['text']};
+@define-color muted      {p['muted']};
+@define-color gold       {p['accent']};
+@define-color rust       {p['crit']};
+@define-color sel_bg     {g['surface1']};
+@define-color sel_fg     {p['text']};
+
+@define-color theme_bg_color          @base;
+@define-color theme_fg_color          @parchment;
+@define-color theme_base_color        @base;
+@define-color theme_text_color        @parchment;
+@define-color theme_selected_bg_color @sel_bg;
+@define-color theme_selected_fg_color @sel_fg;
+@define-color theme_unfocused_bg_color   @base;
+@define-color theme_unfocused_fg_color   @muted;
+@define-color theme_unfocused_base_color @base;
+@define-color theme_unfocused_text_color @parchment;
+@define-color theme_unfocused_selected_bg_color @surface0;
+@define-color theme_unfocused_selected_fg_color @parchment;
+@define-color insensitive_fg_color   @muted;
+@define-color insensitive_bg_color   @base;
+@define-color insensitive_base_color @base;
+@define-color borders                {rgba(p['text'], 0.14)};
+@define-color unfocused_borders      {rgba(p['text'], 0.09)};
+@define-color warning_color          {p['warn']};
+@define-color error_color            @rust;
+@define-color success_color          @gold;
+@define-color link_color             @gold;
+
+@define-color window_bg_color    @base;
+@define-color window_fg_color    @parchment;
+@define-color view_bg_color      @base;
+@define-color view_fg_color      @parchment;
+@define-color sidebar_bg_color   @mantle;
+@define-color sidebar_fg_color   @parchment;
+@define-color headerbar_bg_color @mantle;
+@define-color headerbar_fg_color @parchment;
+@define-color popover_bg_color   @surface0;
+@define-color popover_fg_color   @parchment;
+@define-color card_bg_color      @surface0;
+@define-color accent_bg_color    @sel_bg;
+@define-color accent_fg_color    @sel_fg;
+@define-color accent_color       @gold;
+
+window, .background {{ background-color: @base; color: @parchment; }}
+
+headerbar, .titlebar, toolbar, .toolbar, menubar, .menubar {{
+  background-color: @mantle; color: @parchment;
+  border-color: @borders; box-shadow: none;
+}}
+
+menubar > menuitem:hover {{ background-color: @surface1; color: @parchment; }}
+
+menu, .menu, popover, popover.background {{
+  background-color: @surface0; color: @parchment;
+  border: 1px solid @borders; border-radius: {R['sm']}px;
+}}
+
+menu menuitem:hover, .menu menuitem:hover, modelbutton:hover {{
+  background-color: @surface1; color: @parchment;
+}}
+
+.sidebar, placessidebar, placessidebar list {{
+  background-color: @mantle; color: @parchment;
+}}
+
+placessidebar row, .sidebar row {{
+  border-radius: {R['xs']}px; margin: 1px 4px; min-height: 30px;
+}}
+
+placessidebar row:selected, .sidebar row:selected, list row:selected {{
+  background-color: @sel_bg; color: @sel_fg; font-weight: 600;
+}}
+
+placessidebar row:hover, .sidebar row:hover, list row:hover {{
+  background-color: {rgba(p['text'], 0.08)};
+}}
+
+placessidebar .dim-label, .sidebar label.dim-label {{
+  color: @muted; font-weight: 700; font-size: 90%;
+}}
+
+treeview.view, iconview, .view {{ background-color: @base; color: @parchment; }}
+
+treeview.view:selected, iconview:selected, .view:selected,
+flowbox flowboxchild:selected {{ background-color: @sel_bg; color: @sel_fg; }}
+
+treeview.view:hover, iconview:hover {{ background-color: {rgba(p['text'], 0.06)}; }}
+treeview.view header button {{
+  background-color: @mantle; color: @muted; border-color: @borders;
+}}
+
+entry, .entry, spinbutton {{
+  background-color: @surface0; color: @parchment;
+  border: 1px solid @borders; border-radius: {R['xs']}px; caret-color: @gold;
+}}
+
+entry:focus, .entry:focus {{ border-color: @gold; box-shadow: none; }}
+entry selection, .view selection, textview text selection {{
+  background-color: @sel_bg; color: @sel_fg;
+}}
+
+button {{
+  background-image: none; background-color: @surface0; color: @parchment;
+  border: 1px solid @borders; border-radius: {R['xs']}px; text-shadow: none;
+}}
+
+button:hover {{ background-color: @surface1; }}
+button:active, button:checked {{ background-color: @surface1; color: @parchment; }}
+button.flat, button.image-button.flat {{
+  background-color: transparent; border-color: transparent;
+}}
+button.flat:hover {{ background-color: @surface1; }}
+button:disabled {{ color: @muted; background-color: @base; }}
+
+scrollbar {{ background-color: transparent; border: none; }}
+scrollbar slider {{
+  background-color: {rgba(p['text'], 0.20)}; border-radius: 999px;
+  min-width: 7px; min-height: 7px;
+  border: 3px solid transparent; background-clip: padding-box;
+}}
+scrollbar slider:hover {{ background-color: {rgba(p['text'], 0.36)}; }}
+
+separator, paned > separator {{
+  background-color: @borders; min-width: 1px; min-height: 1px;
+}}
+
+notebook > header {{ background-color: @mantle; border-color: @borders; }}
+notebook > header tab:checked {{ color: @parchment; box-shadow: inset 0 -2px @gold; }}
+statusbar {{ background-color: @mantle; color: @muted; }}
+
+tooltip, tooltip.background {{
+  background-color: @mantle; color: @parchment;
+  border: 1px solid @borders; border-radius: {R['xs']}px;
+}}
+
+progressbar progress {{ background-color: @gold; }}
+check:checked, radio:checked {{
+  background-color: @gold; color: @base; border-color: @gold;
+}}
+
+/* Message-dialog buttons. Adwaita welds the action area into one bar: the
+   buttons are square, edge-to-edge, and separated by 1px hairlines. Read
+   quickly that looks like two of the three buttons are highlighted, because
+   the only thing carrying a visible border is whichever pair happens to sit
+   next to a divider. Here the border is spent on state instead -- transparent
+   at rest, gold on hover, muted on keyboard focus -- and the buttons are
+   spaced apart so the grouping comes from the gaps, not from a frame. */
+messagedialog .dialog-action-area,
+dialog .dialog-action-area {{
+  padding: 12px;
+  border-spacing: 12px;                    /* the gap between the buttons */
+  background-color: transparent;
+  border-top: none;
+}}
+
+messagedialog .dialog-action-area > button,
+dialog .dialog-action-area > button {{
+  background-color: @surface0;
+  border: 1px solid transparent;
+  border-radius: {R['sm']}px;
+  padding: 12px 24px;
+  min-height: 26px;
+  margin: 0;
+  box-shadow: none;
+  outline: none;                           /* kills the dotted focus ring */
+}}
+
+messagedialog .dialog-action-area > button:hover,
+dialog .dialog-action-area > button:hover {{
+  background-color: @surface1;
+  border-color: @gold;
+}}
+
+/* Keyboard focus and the default action still need to be findable without
+   the mouse, but quieter than hover so the two never compete. */
+messagedialog .dialog-action-area > button:focus,
+dialog .dialog-action-area > button:focus,
+messagedialog .dialog-action-area > button.suggested-action,
+dialog .dialog-action-area > button.suggested-action {{
+  border-color: @borders;
+}}
+
+messagedialog .dialog-action-area > button:active,
+dialog .dialog-action-area > button:active {{
+  background-color: @surface1;
+  border-color: @gold;
+}}
+
+/* The dialog body itself was cramped against its own edges. */
+messagedialog .message-area,
+messagedialog box.vertical > box.vertical {{
+  padding: 8px 12px;
+}}
+"""
+    write(CFG / "gtk-3.0" / "gtk.css", css)
+    write(CFG / "gtk-4.0" / "gtk.css", css)
+
+
+def render_gtk_settings(p):
+    """The base theme and the icon set, which gtk.css cannot express.
+
+    Adwaita vs Adwaita-dark decides what every widget gtk.css does not name
+    falls back to, so a light palette on top of Adwaita-dark leaves black
+    holes in Thunar. `reload` mirrors these into gsettings for GTK4."""
+    ini = f"""[Settings]
+gtk-theme-name={p['gtk_theme']}
+gtk-application-prefer-dark-theme={p['prefer_dark']}
+gtk-icon-theme-name={p['icons']}
+gtk-font-name=Cantarell 11
+gtk-cursor-theme-size=24
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle=hintslight
+gtk-xft-rgba=rgb
+"""
+    write(CFG / "gtk-3.0" / "settings.ini", ini)
+    write(CFG / "gtk-4.0" / "settings.ini", ini)
+
+
+def render_nvim(p):
+    write(CFG / "nvim" / "lua" / "theme.lua", f"""-- generated by `theme` -- do not edit by hand
+return {{ colorscheme = "{p['nvim']}", background = "dark" }}
+""")
+
+
+def render_hyprlock(p):
+    """hyprlock reads its config at launch, so nothing to reload."""
+    img = pinned() or LOCK_IMAGE
+    if img.is_file():
+        background = f"""background {{
+    monitor =
+    path = {img}
+    blur_passes = 3
+    blur_size = 6
+    brightness = 0.55
+}}"""
+    else:
+        background = f"""background {{
+    monitor =
+    color = {p['base']}
+}}"""
+    write(CFG / "hypr" / "hyprlock.conf", f"""# generated by `theme` -- do not edit by hand
+# Layout from the shipped sample at /usr/share/hypr/hyprlock.conf.
+
+$font = JetBrainsMono Nerd Font
+
+general {{
+    hide_cursor = true
+}}
+
+animations {{
+    enabled = true
+    bezier = linear, 1, 1, 0, 0
+    animation = fadeIn, 1, 5, linear
+    animation = fadeOut, 1, 5, linear
+    animation = inputFieldDots, 1, 2, linear
+}}
+
+{background}
+
+input-field {{
+    monitor =
+    size = 18%, 5%
+    outline_thickness = 2
+    rounding = {radii(p)['xs'] // 2}
+
+    inner_color = {hypr_rgba(p['base'], 'ff')}
+    outer_color = {hypr_rgba(p['accent'], 'ff')}
+    check_color = {hypr_rgba(p['accent2'], 'ff')}
+    fail_color  = {hypr_rgba(p['crit'], 'ff')}
+
+    font_color        = {hypr_rgba(p['text'], 'ff')}
+    placeholder_color = {hypr_rgba(p['muted'], 'b3')}
+    font_family       = $font
+
+    placeholder_text = Password
+    fail_text        = $PAMFAIL
+    fade_on_empty    = false
+    dots_spacing     = 0.3
+
+    position = 0, -40
+    halign = center
+    valign = center
+}}
+
+# TIME
+label {{
+    monitor =
+    text = $TIME
+    font_size = 92
+    font_family = $font
+    color = {hypr_rgba(p['text'], 'ff')}
+
+    position = 0, 180
+    halign = center
+    valign = center
+}}
+
+# DATE
+label {{
+    monitor =
+    text = cmd[update:60000] date +"%A, %d %B %Y"
+    font_size = 18
+    font_family = $font
+    color = {hypr_rgba(p['accent'], 'ff')}
+
+    position = 0, 110
+    halign = center
+    valign = center
+}}
+""")
+
+
+# --------------------------------------------------------------------------
+def reload(name, p):
+    def run(*cmd, **kw):
+        try:
+            subprocess.run(cmd, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
+        except FileNotFoundError:
+            pass
+
+    # The folder-colour variant is a thin theme in $HOME (see
+    # `papirus-variant`); build it on first use of a theme, after a
+    # papirus-icon-theme update has wiped it, and whenever the recipe below
+    # changes -- the theme stamps its inputs into `.recipe` so we can tell.
+    icons = HOME / ".local/share/icons" / p["icons"]
+    if "icons_src" in p:
+        base, color = p["icons_src"]
+        pairs = [f"{k}={v}" for k, v in sorted(FOLDER_HUES.items())]
+        want = f"{base} {color} {' '.join(pairs)}".strip() + "\n"
+        stamp = icons / ".recipe"
+        if not icons.is_dir() or not stamp.exists() or stamp.read_text() != want:
+            run(str(HOME / ".local/bin/papirus-variant"),
+                p["icons"], base, color, *pairs)
+
+    # GTK4/libadwaita apps read gsettings, not settings.ini.
+    for key, val in (("gtk-theme", p["gtk_theme"]),
+                     ("icon-theme", p["icons"]),
+                     ("color-scheme", p["color_scheme"])):
+        run("gsettings", "set", "org.gnome.desktop.interface", key, val)
+
+    # Thunar only reads settings.ini and gtk.css at startup, and it keeps a
+    # daemon alive after the last window closes.
+    run("thunar", "-q")
+
+    run("pkill", "waybar")
+    env = dict(os.environ)
+    subprocess.Popen(["waybar"], stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True, env=env)
+
+    run("pkill", "dunst")
+    subprocess.Popen(["dunst"], stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True, env=env)
+
+    run("hyprctl", "reload")
+
+    # hyprpaper only reads its config at start.
+    run("pkill", "-x", "hyprpaper")
+    subprocess.Popen(["hyprpaper"], stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True, env=env)
+
+    # Live-recolour every running kitty without restarting it.
+    colors = str(CFG / "kitty" / "colors.conf")
+    run("kitten", "@", "--to", os.environ.get("KITTY_LISTEN_ON", ""),
+        "set-colors", "--all", "--configured", colors)
+
+    run("notify-send", "Theme", f"Switched to {name}")
+
+
+def main():
+    args = sys.argv[1:]
+    family = read_state()
+
+    if not args or args[0] in ("-h", "--help"):
+        print(f"current: {family}\n")
+        print("available:")
+        for k, v in FAMILIES.items():
+            mark = "*" if k == family else " "
+            print(f"  {mark} {k:<9} {v['label']}")
+        print("\nusage: theme <name>")
+        return 0
+
+    name = ALIASES.get(args[0], args[0])
+    if name not in FAMILIES:
+        print(f"unknown theme: {args[0]}", file=sys.stderr)
+        print("available: " + ", ".join(FAMILIES), file=sys.stderr)
+        return 1
+    family = name
+
+    p = palette(family)
+    for fn in (render_waybar, render_kitty, render_alacritty, render_rofi,
+               render_dunst, render_hypr, render_starship, render_gtk,
+               render_gtk_settings, render_nvim, render_wallpaper):
+        fn(p)
+    render_hyprlock(p)
+
+    write(STATE, family + "\n")
+    reload(family, p)
+    print(f"theme -> {family} ({p['label']})")
+    print("open a new shell for the prompt, and a new terminal for full effect")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,7 @@
+[Unit]
+Description=Commit changed dotfiles to ~/.dotfiles
+Documentation=file://$HOME/Documents/system-guide.md
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/dots-autosave

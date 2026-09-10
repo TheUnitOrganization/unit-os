@@ -1,0 +1,12 @@
+brave-bin
+bun-bin
+nordvpn-bin
+papirus-folders
+paru-bin
+paru-bin-debug
+rtk-bin
+ttf-geist
+ttf-geist-mono
+wlogout
+yay-bin
+yay-bin-debug

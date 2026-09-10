@@ -1,0 +1,14 @@
+configuration {
+    modes:                       "drun,run,window";
+    font:                        "JetBrainsMono Nerd Font 12";
+    show-icons:                  true;
+    icon-theme:                  "Papirus-Dark";
+    drun-display-format:         "{name}";
+    display-drun:                "apps";
+    display-run:                 "run";
+    display-window:              "window";
+    sidebar-mode:                false;
+    terminal:                    "kitty";
+}
+
+@theme "theme"

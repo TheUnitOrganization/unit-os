@@ -1,0 +1,18 @@
+# Secrets — never commit. `env` holds live API keys for the waybar AI pill.
+config/ai-usage/env
+**/env
+*.key
+*.pem
+.env
+
+# Byte-compiled / editor leftovers
+__pycache__/
+*.pyc
+*.bak
+*.swp
+*~
+
+# Runtime state, not config
+config/themes/current
+config/themes/wallpaper
+**/.recipe
