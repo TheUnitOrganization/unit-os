@@ -190,3 +190,10 @@ hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = tr
 -- Wallpaper: skip to another image from the current theme's set (hyprpaper
 -- rotates on its own every 30 min; `wall-next` does it on demand).
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("wall-next"))
+
+-- Lid: screen off on close, on again on open. Nothing else changes -- logind
+-- is set to ignore the lid (10-power-key.conf), so no suspend, no lock; a
+-- download, a build or an agent keeps running with the lid shut. `locked`
+-- so it still works with hyprlock up. hypridle's own timers keep applying.
+hl.bind("switch:on:Lid Switch",  hl.dsp.dpms({ action = "off" }), { locked = true })
+hl.bind("switch:off:Lid Switch", hl.dsp.dpms({ action = "on" }),  { locked = true })

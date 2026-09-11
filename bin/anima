@@ -9,6 +9,9 @@ sensor mast, extras, pose -- and a BBTT-nn serial.
 
   anima                      one roll on the good model, on-white/on-black per theme
   anima --draft              cheapest model (ignores framing -- robot fills the frame)
+  anima --ref [image.png]    variant OF an image (default: the wallpaper) -- same
+                             design language guaranteed, but structure barely
+                             moves (legs stay legs); heads, extras, pose, serial do
   anima --seed 42            reproduce a roll (same seed = same spec + prompt)
   anima --show               generate, then put it on screen (not pinned)
   anima --pin                generate, then pin it as the wallpaper for good
@@ -37,7 +40,9 @@ MODELS = {
     "schnell": "black-forest-labs/flux-schnell",
     "dev":     "black-forest-labs/flux-dev",
     "pro":     "black-forest-labs/flux-1.1-pro",
+    "ref":     "black-forest-labs/flux-kontext-pro",
 }
+REF = HOME / "Pictures" / "unit-os-theme" / "anima-wheel-clean.png"   # wallpaper minus the wordmark
 UPSCALER = "nightmareai/real-esrgan"
 
 def log(*parts):
@@ -54,12 +59,12 @@ def log(*parts):
 # four legs, slab body -- so most rolls read as siblings of the wallpaper and
 # the odd one is a cousin.
 LOCOMOTION = [
-    (5, "four long articulated legs with dark hydraulic joints and small rubber feet"),
-    (3, "four legs ending in wheel-feet, wheel-leg hybrid"),
-    (2, "six slender articulated legs, insect-like stance"),
-    (2, "two thick legs and a counterbalancing tail, digitigrade"),
-    (1, "four stubby legs with rubber tracks instead of feet"),
-    (1, "three legs, tripod stance"),
+    (5, "four long slender two-segment legs with dark joints and small round foot pads"),
+    (3, "four long slender two-segment legs ending in small wheels, wheel-leg hybrid"),
+    (2, "six slender two-segment legs with dark joints, insect-like stance"),
+    (2, "two long slender legs and a counterbalancing tail, digitigrade"),
+    (1, "three slender two-segment legs, tripod stance"),
+    (1, "four small wheels on slender suspension arms, no legs"),
 ]
 BODY = [
     (5, "a low rectangular slab chassis with rounded panel edges"),
@@ -79,14 +84,14 @@ EXTRA = [
     (2, "a single tall whip antenna"),
     (2, "a folded manipulator arm tucked under the body"),
     (1, "a cargo rack with tie-down rails on top"),
-    (1, "a winch drum on the front"),
+    (1, "a small cargo pod clipped to the top"),
     (1, "a small folded solar panel on top"),
     (2, "nothing else"),
 ]
 POSE = [
     (5, "standing still, three-quarter front view"),
     (2, "side profile, standing"),
-    (2, "front view, standing square"),
+    (1, "front view, standing square"),
     (1, "mid-stride, one leg lifted"),
     (1, "crouched low, legs folded"),
 ]
@@ -109,22 +114,47 @@ def roll(seed):
         "pose":       pick(rng, POSE),
     }
 
+# The house style, written out as if describing the one 3D model every roll
+# is a variant of. Mirrors the reference wallpaper (anima-wheel.png) part by
+# part; the dice only swap what comes after "configuration:".
+STYLE = (
+    "matte light grey armored body panels with a soft satin finish and fine "
+    "recessed panel lines, rounded corners, dark gunmetal mechanical joints, "
+    "actuators and cabling visible between the panels, a single horizontal "
+    "amber light bar glowing on the front face, a small printed 'unit' label "
+    "under it, a small printed serial '{serial}' on the side. "
+    "an advanced research-grade autonomous robot: futuristic, precise, "
+    "engineering-focused, industrial-elegant. calm and civilian -- no guns, "
+    "no heavy armor, no camouflage, no aggressive angles, not a toy, not cute. "
+)
+FRAMING = (
+    "product photograph, wide shot from a distance: the robot is small in the "
+    "frame, about a third of the width, centered, with a large amount of empty "
+    "backdrop above and around it. {bg}, soft diffused studio lighting, "
+    "photoreal hard-surface industrial design render, ultra detailed, clean, "
+    "no other text, no people"
+)
+
+def ref_prompt(spec):
+    """Kontext is an editor: say what to change, and what to keep."""
+    return (
+        f"Redesign this robot as another model of the same product family: "
+        f"{spec['body']}, {spec['locomotion']}, {spec['head']}, {spec['extra']}. "
+        f"{spec['pose']}. Keep the same matte light grey panels, dark joints, "
+        f"amber light bar, 'unit' label, studio backdrop, lighting and camera "
+        f"distance. Change the printed serial to '{spec['serial']}'. Remove "
+        "any small text in the bottom-left corner. Photoreal render."
+    )
+
 def prompt(spec, backdrop):
     bg = ("seamless pure white studio backdrop, soft grey floor reflection"
           if backdrop == "white" else
           "seamless pure black studio backdrop, faint floor reflection")
     return (
-        f"product photograph of an autonomous robot, {spec['body']}, "
-        f"{spec['locomotion']}, {spec['head']}, {spec['extra']}. "
-        "matte light grey armored panels with subtle panel lines, dark gunmetal "
-        "mechanical joints and actuators, a single horizontal amber light bar "
-        "glowing on the front panel, a small printed 'unit' label, "
-        f"small stencilled marking '{spec['serial']}' on the side. "
-        f"{spec['pose']}. wide shot from a distance: the robot is small in the "
-        "frame, about a third of the width, centered, with a large amount of "
-        f"empty backdrop above and around it. {bg}, soft diffused studio lighting, "
-        "photoreal industrial design render, hard-surface, ultra detailed, "
-        "clean, no text other than the labels, no people"
+        STYLE.format(serial=spec["serial"])
+        + f"configuration: {spec['body']}, {spec['locomotion']}, {spec['head']}, "
+        + f"{spec['extra']}. {spec['pose']}. "
+        + FRAMING.format(bg=bg)
     )
 
 # ------------------------------------------------------------- replicate ---
@@ -177,20 +207,23 @@ def fetch(url, dest):
             f.write(r.read())
     retry(go, "download")
 
-def render(model, text, seed):
+def data_uri(png):
+    import base64
+    return "data:image/png;base64," + base64.b64encode(png.read_bytes()).decode()
+
+def render(model, text, seed, ref=None):
     inp = {"prompt": text, "aspect_ratio": "16:9", "output_format": "png", "seed": seed}
-    if model == "pro":
+    if model == "ref":
+        inp.update(input_image=data_uri(ref), safety_tolerance=2)
+    elif model == "pro":
         inp.update(width=1440, height=810, prompt_upsampling=False, safety_tolerance=2)
     else:
         inp.update(megapixels="1", num_outputs=1, go_fast=False)
     return finish(api(f"/models/{MODELS[model]}/predictions", {"input": inp}))
 
 def upscale(png):
-    with open(png, "rb") as f:
-        import base64
-        data = "data:image/png;base64," + base64.b64encode(f.read()).decode()
     return finish(api(f"/models/{UPSCALER}/predictions",
-                      {"input": {"image": data, "scale": 2, "face_enhance": False}}))
+                      {"input": {"image": data_uri(png), "scale": 2, "face_enhance": False}}))
 
 # -------------------------------------------------------------- wordmark ---
 def size_of(png):
@@ -227,6 +260,7 @@ def main():
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument("--seed", type=int)
     ap.add_argument("--draft", action="store_true")
+    ap.add_argument("--ref", nargs="?", const=str(REF))
     ap.add_argument("--dev", action="store_true")
     ap.add_argument("--dry", action="store_true")
     ap.add_argument("--show", action="store_true")
@@ -241,13 +275,14 @@ def main():
 
     seed = a.seed if a.seed is not None else random.randrange(1 << 31)
     backdrop = "black" if a.black else "white" if a.white else current_backdrop()
-    model = "schnell" if a.draft else "dev" if a.dev else "pro"
+    model = "ref" if a.ref else "schnell" if a.draft else "dev" if a.dev else "pro"
+    ref = Path(a.ref).expanduser() if a.ref else None
     spec = roll(seed)
-    text = prompt(spec, backdrop)
+    text = ref_prompt(spec) if ref else prompt(spec, backdrop)
 
     LOG.parent.mkdir(parents=True, exist_ok=True)
     LOG.write_text(f"anima {' '.join(sys.argv[1:])}  {datetime.now():%F %T}\n")
-    log(f":: seed {seed}  model {model}  backdrop {backdrop}")
+    log(f":: seed {seed}  model {model}  backdrop {backdrop}" + (f"  ref {ref}" if ref else ""))
     for k, v in spec.items():
         log(f"   {k:<10} {v}")
     if a.dry:
@@ -259,14 +294,14 @@ def main():
     raw, final = base.with_suffix(".raw.png"), base.with_suffix(".png")
 
     log(":: rendering")
-    fetch(render(model, text, seed), raw)
+    fetch(render(model, text, seed, ref), raw)
     if a.upscale:
         log(":: upscaling 2x")
         fetch(upscale(raw), raw)
     wordmark(raw, final, backdrop)
     raw.unlink()
     base.with_suffix(".txt").write_text(
-        f"seed {seed}\nmodel {model}\nbackdrop {backdrop}\n"
+        f"seed {seed}\nmodel {model}\nbackdrop {backdrop}\nref {ref or ''}\n"
         + "".join(f"{k} {v}\n" for k, v in spec.items()) + f"\n{text}\n")
     log(f":: {final}")
 
