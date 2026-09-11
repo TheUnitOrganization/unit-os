@@ -136,6 +136,19 @@ terminal-font: "$FONT_NAME"
 
     scrollbar = false
 }
+
+# The countdown. GRUB fills %d with the seconds left and hides the label the
+# moment any key is pressed, so its disappearing is also the "I heard you".
++ label {
+    id    = "__timeout__"
+    left  = 8%
+    top   = 20%
+    width = 60%
+    align = "left"
+    font  = "$FONT_NAME"
+    color = "#595959"
+    text  = "boots in %d"
+}
 EOF
 sed 's/^/   /' "$THEME_DIR/theme.txt"
 
@@ -161,6 +174,9 @@ set gfxpayload=keep
 loadfont \$prefix/fonts/unicode.pf2
 loadfont \$prefix/fonts/menu.pf2
 terminal_output gfxterm
+# Once a menuentry runs, the theme is gone and echo writes to the plain
+# gfxterm -- pin that to the same font so the hand-off line matches the menu.
+set gfxterm_font="$FONT_NAME"
 
 set theme=\$prefix/themes/unit/theme.txt
 export theme
@@ -169,14 +185,21 @@ set default=0
 set timeout=$TIMEOUT
 set timeout_style=menu
 
+# The echo is the only feedback that ENTER did anything: with quiet on the
+# kernel line, the screen would otherwise sit black until hyprlock. It stays
+# up while the kernel + initrd are read (gfxpayload=keep, no clear).
 menuentry "Arch Linux" {
     search --no-floppy --fs-uuid --set=root $ESP_UUID
+    echo
+    echo "  > Arch Linux"
     linux  /vmlinuz-linux $CMDLINE
     initrd /initramfs-linux.img
 }
 
 menuentry "Windows" {
     search --no-floppy --fs-uuid --set=root $ESP_UUID
+    echo
+    echo "  > Windows"
     chainloader /EFI/Microsoft/Boot/bootmgfw.efi
 }
 EOF
@@ -186,6 +209,8 @@ cat <<'EOF'
 
 done. Reboot to see it.
 
+  keys               up/down to move, ENTER to boot (space only stops the
+                     countdown); the "boots in N" line vanishes on any key
   text too small     sudo ~/.local/bin/setup-grub --font-size 48
   recovery kernel    press 'e' on the Arch entry, change initramfs-linux.img
                      to initramfs-linux-fallback.img, then Ctrl+X
