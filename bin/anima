@@ -5,8 +5,7 @@ anima -- roll a random robot in the ANIMA house style and render it.
 The style is fixed (that is the point): matte grey panels, dark joints, one
 amber light bar, a small "unit" label, seamless studio backdrop, product-shot
 lighting. What varies is the machine itself -- legs or wheels, body shape,
-sensor mast, extras, pose -- and a serial in the JJVV-nn rhythm (never JJVV
-itself -- that name is reserved).
+sensor mast, extras, pose -- and a BBTT-nn serial.
 
   anima                      one roll on the good model, on-white/on-black per theme
   anima --draft              cheapest model (ignores framing -- robot fills the frame)
@@ -22,12 +21,14 @@ Token comes from ~/.config/ai-usage/env (REPLICATE_API_TOKEN). Output lands
 in ~/Pictures/anima/gen/<stamp>-<serial>.png with a .txt beside it holding
 the seed, spec and prompt, so any roll can be re-rolled or tweaked.
 """
-import argparse, json, os, random, subprocess, sys, time, urllib.request
+import argparse, json, os, random, subprocess, sys, time, traceback
+import urllib.error, urllib.request
 from datetime import datetime
 from pathlib import Path
 
 HOME = Path.home()
 OUT = HOME / "Pictures" / "anima" / "gen"
+LOG = HOME / ".local" / "state" / "anima" / "last.log"
 ENV = HOME / ".config" / "ai-usage" / "env"
 PIN = HOME / ".config" / "themes" / "wallpaper"
 FONT = "Geist Mono"
@@ -38,6 +39,15 @@ MODELS = {
     "pro":     "black-forest-labs/flux-1.1-pro",
 }
 UPSCALER = "nightmareai/real-esrgan"
+
+def log(*parts):
+    """Print, and keep a copy in LOG -- so a failure can be read after the
+    fact (`cat ~/.local/state/anima/last.log`) instead of pasted from a
+    scrollback. Rewritten on every run."""
+    line = " ".join(str(p) for p in parts)
+    print(line, flush=True)
+    with open(LOG, "a") as f:
+        f.write(line + "\n")
 
 # ---------------------------------------------------------------- the dice --
 # Each list is (weight, phrase). Weights lean toward the reference render --
@@ -85,12 +95,8 @@ def pick(rng, table):
     return rng.choices([p for _, p in table], weights=[w for w, _ in table])[0]
 
 def serial(rng):
-    """Same rhythm as JJVV-nn -- two doubled letters, a dash, two digits --
-    but JJVV itself is reserved for something bigger and never rolls."""
-    while True:
-        a, b = rng.sample("ABCDEFGHKLMNPRSTUVWXYZ", 2)   # no I/O/Q/J: stencil-safe
-        if a + b != "JV":
-            return f"{a}{a}{b}{b}-{rng.randrange(100):02d}"
+    """BBTT-nn -- the family name for generated robots. (JJVV is reserved.)"""
+    return f"BBTT-{rng.randrange(100):02d}"
 
 def roll(seed):
     rng = random.Random(seed)
@@ -130,7 +136,23 @@ def token():
             return line.split("=", 1)[1].strip().strip('"').strip("'")
     sys.exit(f"no REPLICATE_API_TOKEN in {ENV}")
 
+def retry(fn, what, tries=4):
+    """Replicate's edge drops a connection now and then (TLS EOF, remote
+    disconnect, read timeout). Try again with a short backoff before giving
+    up; a failed roll costs nothing, so the retry is free."""
+    for i in range(tries):
+        try:
+            return fn()
+        except (urllib.error.URLError, OSError, ConnectionError) as e:
+            if i == tries - 1:
+                raise
+            log(f"   {what}: {str(e).strip()[:80]} -- retry {i + 1}/{tries - 1}")
+            time.sleep(2 ** (i + 1))
+
 def api(path, body=None):
+    return retry(lambda: _api(path, body), "api")
+
+def _api(path, body=None):
     req = urllib.request.Request(
         "https://api.replicate.com/v1" + path,
         data=json.dumps(body).encode() if body is not None else None,
@@ -150,8 +172,10 @@ def finish(pred):
     return out[0] if isinstance(out, list) else out
 
 def fetch(url, dest):
-    with urllib.request.urlopen(url, timeout=120) as r, open(dest, "wb") as f:
-        f.write(r.read())
+    def go():
+        with urllib.request.urlopen(url, timeout=120) as r, open(dest, "wb") as f:
+            f.write(r.read())
+    retry(go, "download")
 
 def render(model, text, seed):
     inp = {"prompt": text, "aspect_ratio": "16:9", "output_format": "png", "seed": seed}
@@ -221,9 +245,11 @@ def main():
     spec = roll(seed)
     text = prompt(spec, backdrop)
 
-    print(f":: seed {seed}  model {model}  backdrop {backdrop}")
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    LOG.write_text(f"anima {' '.join(sys.argv[1:])}  {datetime.now():%F %T}\n")
+    log(f":: seed {seed}  model {model}  backdrop {backdrop}")
     for k, v in spec.items():
-        print(f"   {k:<10} {v}")
+        log(f"   {k:<10} {v}")
     if a.dry:
         print(); print(text); return
 
@@ -232,24 +258,37 @@ def main():
     base = OUT / f"{stamp}-{spec['serial']}"
     raw, final = base.with_suffix(".raw.png"), base.with_suffix(".png")
 
-    print(":: rendering")
+    log(":: rendering")
     fetch(render(model, text, seed), raw)
     if a.upscale:
-        print(":: upscaling 2x")
+        log(":: upscaling 2x")
         fetch(upscale(raw), raw)
     wordmark(raw, final, backdrop)
     raw.unlink()
     base.with_suffix(".txt").write_text(
         f"seed {seed}\nmodel {model}\nbackdrop {backdrop}\n"
         + "".join(f"{k} {v}\n" for k, v in spec.items()) + f"\n{text}\n")
-    print(f":: {final}")
+    log(f":: {final}")
 
     if a.show or a.pin:
         subprocess.run(["hyprctl", "hyprpaper", "reload", f",{final}"],
                        stdout=subprocess.DEVNULL)
     if a.pin:
         PIN.write_text(f"# one absolute path = every theme, both sides\n{final}\n")
-        print(f":: pinned in {PIN}")
+        log(f":: pinned in {PIN}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except BrokenPipeError:
+        sys.exit(0)
+    except Exception as e:
+        with open(LOG, "a") as f:
+            f.write(traceback.format_exc())
+        log(f"anima: {type(e).__name__}: {str(e).strip()[:120]}")
+        log(f"       full trace in {LOG}")
+        sys.exit(1)
