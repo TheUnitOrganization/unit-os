@@ -47,6 +47,8 @@ hl.bind(mainMod .. " + ALT + C",   hl.dsp.exec_cmd("brave --app=https://calendar
 -- now -- it has to, because ticking means re-running rofi with a new order --
 -- so this is a plain exec, not a pipe.
 hl.bind(mainMod .. " + SLASH",     hl.dsp.exec_cmd([[sh -c '$HOME/.config/hypr/scripts/keybinds.py']]))
+-- Same checklist for herdr's keys (prefix is CTRL+B), read live from its config.
+hl.bind(mainMod .. " + CTRL + SLASH", hl.dsp.exec_cmd([[sh -c '$HOME/.config/hypr/scripts/keybinds.py herdr']]))
 -- The system guide and the to-do list, one shift away from the cheatsheet.
 hl.bind(mainMod .. " + SHIFT + SLASH", hl.dsp.exec_cmd([[sh -c 'brave "file://$HOME/Documents/system-guide.html"']]))
 hl.bind(mainMod .. " + SHIFT + D",     hl.dsp.exec_cmd([[sh -c 'kitty --title TODO -e nvim "$HOME/Documents/TODO.md"']]))
