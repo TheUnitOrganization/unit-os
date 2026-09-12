@@ -1,0 +1,13 @@
+bat
+fd
+fzf
+git
+git-delta
+neovim
+openssh
+python
+ripgrep
+starship
+tmux
+ttyd
+zoxide

@@ -15,6 +15,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SUDO=""; [[ $EUID -ne 0 ]] && SUDO=sudo   # a container is root and has no sudo
 MODE=copy
 PACKAGES=1
 DRY=0
@@ -89,7 +90,7 @@ install_packages() {
 
   if [[ -f $native ]]; then
     say "installing native packages"
-    run sudo pacman -S --needed --noconfirm - < "$native" || warn "some native packages failed"
+    run $SUDO pacman -S --needed --noconfirm - < "$native" || warn "some native packages failed"
   fi
   if [[ -f $aur ]]; then
     # paru on this machine is built against an old libalpm; yay is the working one.

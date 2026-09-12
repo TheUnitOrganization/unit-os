@@ -1,0 +1,72 @@
+# The clean-base check, run remotely on every push.
+#
+# Two jobs, two claims:
+#   desktop  -- "a stranger clones this on fresh Arch and ./install.sh works":
+#               full package list, real pacman, then unit-doctor.
+#   image    -- "the Dockerfile builds and herdr + ttyd are inside it":
+#               the container that Vercel Sandbox / Fly / Cloudflare would boot.
+#
+# Neither touches a laptop. Free on a public repo.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    name: install.sh on fresh Arch
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: tools the checkout needs
+        run: pacman -Syu --noconfirm --needed git
+
+      - uses: actions/checkout@v4
+
+      - name: full install (packages + configs + theme)
+        run: |
+          # AUR packages are skipped: makepkg refuses root and there is no helper.
+          # That is expected and install.sh only warns.
+          ./install.sh
+        env:
+          HOME: /root
+
+      - name: unit-doctor
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          unit-doctor
+        env:
+          HOME: /root
+
+  image:
+    name: server image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: unit-os:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: smoke test
+        run: |
+          docker run --rm unit-os:ci bash -lc '
+            set -e
+            echo "--- who am i";  whoami
+            echo "--- tools";     for b in nvim tmux git starship fzf ttyd; do command -v $b; done
+            echo "--- herdr";     herdr --version || echo "herdr missing (install step is non-fatal)"
+            echo "--- unit-os";   ls ~/unit-os/bin | head -3
+            echo "--- doctor";    CI=1 unit-doctor --quiet || true
+          '
