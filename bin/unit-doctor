@@ -71,6 +71,7 @@ section "Secrets"
 
 leak=0
 while IFS= read -r f; do
+  [[ $f == bin/unit-doctor ]] && continue   # this file holds the patterns themselves
   grep -qIE 'sk-[A-Za-z0-9]{16,}|ghp_|github_pat_|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY' \
     "$REPO/$f" 2>/dev/null && { bad "possible secret committed: $f"; leak=1; }
 done < <(git -C "$REPO" ls-files 2>/dev/null)
